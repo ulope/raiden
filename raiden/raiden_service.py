@@ -1,6 +1,8 @@
 # -*- coding: utf8 -*-
 from ethereum import slogging
 
+from tinyrpc.dispatch import public
+
 from raiden.assetmanager import AssetManager
 from raiden.channelgraph import ChannelGraph
 from raiden.channel import Channel, ChannelEndState
@@ -20,6 +22,14 @@ def safe_address_decode(address):
 
     return address
 
+
+def safe_address_encode(address):
+    try:
+        address = address.encode('hex')
+    except TypeError:
+        pass
+
+    return address
 
 class RaidenError(Exception):
     pass
@@ -47,6 +57,26 @@ class RaidenAPI(object):
     def assets(self):
         return self.raiden.assetmanagers.keys()
 
+    @public
+    def get_assets(self):
+        assets = [asset.encode('hex') for asset in self.assets]
+        return assets
+
+    @public
+    def get_partner_addresses(self, asset_address=None):
+        from itertools import chain as itertools_chain
+
+        if asset_address:
+            assetmanager = self.raiden.assetmanagers[asset_address.decode('hex')]
+            partner = [safe_address_encode(address) for address in assetmanager.channels.keys()]
+        else:
+            assetmanagers = self.raiden.assetmanagers.values()
+            nested = [assetmanager.channels.keys() for assetmanager in assetmanagers]
+            partner = list(itertools_chain.from_iterable(nested))
+            partner = [safe_address_encode(address) for address in partner]
+        return partner
+
+    @public
     def transfer(self, asset_address, amount, target, callback=None):
         if not isinstance(amount, (int, long)):
             raise InvalidAmount('Amount not a number')
@@ -69,6 +99,22 @@ class RaidenAPI(object):
         transfer_manager = self.raiden.assetmanagers[asset_address].transfermanager
         transfer_manager.transfer(amount, target, callback=callback)
 
+    @public
+    def close_channel(self):
+        raise NotImplementedError
+
+
+    @public
+    def open_channel(self, asset_address, nettingcontract_address, reveal_timeout):
+        asset_manager = self.raiden.get_or_create_asset_manager(asset_address)
+        self.raiden.setup_channel(self,
+                                  asset_manager,
+                                  asset_address,
+                                  nettingcontract_address,
+                                  reveal_timeout
+                                  )
+
+    @public
     def request_transfer(self, asset_address, amount, target):
         if not isaddress(asset_address) or asset_address not in self.assets:
             raise InvalidAddress('asset address is not valid.')
@@ -79,8 +125,9 @@ class RaidenAPI(object):
         transfer_manager = self.raiden.assetmanagers[asset_address].transfermanager
         transfer_manager.request_transfer(amount, target)
 
+    @public
     def exchange(self, asset_a, asset_b, amount_a=None, amount_b=None, callback=None):  # pylint: disable=too-many-arguments
-        pass
+        raise NotImplementedError
 
 
 class RaidenService(object):

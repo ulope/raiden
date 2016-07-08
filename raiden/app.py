@@ -15,6 +15,18 @@ from raiden.network.discovery import Discovery
 from raiden.network.transport import UDPTransport
 from raiden.network.rpc.client import BlockChainService
 
+
+#### refactor later
+from tinyrpc.server import RPCServer
+from tinyrpc.dispatch import RPCDispatcher
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+import gevent.wsgi
+import gevent.queue
+from tinyrpc.transports.wsgi import WsgiServerTransport
+from tinyrpc.server.gevent import RPCServerGreenlets
+
+#####
+
 log = slogging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
@@ -42,6 +54,7 @@ class App(object):  # pylint: disable=too-few-public-methods
 
     def stop(self):
         self.transport.server.start()
+
 
 
 def main():
@@ -110,6 +123,30 @@ def main():
     event.wait()
 
     app.stop()
+
+
+class RPC_API(object):
+    dispatcher = RPCDispatcher()
+    transport = WsgiServerTransport(queue_class=gevent.queue.Queue)
+
+    def __init__(self, app):
+        self.api = app.raiden.api
+        self.wsgi_server = gevent.wsgi.WSGIServer(('127.0.0.1', 1337), self.transport.handle)
+
+        # call e.g. 'raiden.api.transfer' via JSON RPC
+        print(self.api)
+        self.dispatcher.register_instance(self.api, 'raiden.api.')
+        self.rpc_server = RPCServerGreenlets(
+            self.transport,
+            JSONRPCProtocol(),
+            self.dispatcher
+            )
+        print(self.dispatcher.subdispatchers)
+
+    def start(self):
+        gevent.spawn(self.wsgi_server.serve_forever)
+        self.rpc_server.serve_forever()
+
 
 
 if __name__ == '__main__':

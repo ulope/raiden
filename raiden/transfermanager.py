@@ -81,7 +81,7 @@ class TransferManager(object):
             task.join()
 
     def request_transfer(self, amount, target):
-        pass
+        raise NotImplementedError
 
     def on_transferrequest(self, request):
         # FIXME: Dummy, we accept any request
