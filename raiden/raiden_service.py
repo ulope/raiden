@@ -1,7 +1,15 @@
 # -*- coding: utf8 -*-
 from ethereum import slogging
 
+import gevent.wsgi
+import gevent.queue
+
 from tinyrpc.dispatch import public
+from tinyrpc.server import RPCServer
+from tinyrpc.dispatch import RPCDispatcher
+from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
+from tinyrpc.transports.wsgi import WsgiServerTransport
+from tinyrpc.server.gevent import RPCServerGreenlets
 
 from raiden.assetmanager import AssetManager
 from raiden.channelgraph import ChannelGraph
@@ -31,6 +39,7 @@ def safe_address_encode(address):
 
     return address
 
+
 class RaidenError(Exception):
     pass
 
@@ -45,6 +54,29 @@ class InvalidAddress(RaidenError):
 
 class InvalidAmount(RaidenError):
     pass
+
+
+class APIRPCServer(object):
+    """ The JSON RPC 2.0 Server connecting to the API"""
+
+    dispatcher = RPCDispatcher()
+    transport = WsgiServerTransport(queue_class=gevent.queue.Queue)
+
+    def __init__(self, app, host, port):
+        self.api = app.raiden.api
+        self.wsgi_server = gevent.wsgi.WSGIServer((host, port), self.transport.handle)
+
+        # call e.g. 'raiden.api.transfer' via JSON RPC
+        self.dispatcher.register_instance(self.api, 'raiden.api.')
+        self.rpc_server = RPCServerGreenlets(
+            self.transport,
+            JSONRPCProtocol(),
+            self.dispatcher
+            )
+
+    def start(self):
+        gevent.spawn(self.wsgi_server.serve_forever)
+        self.rpc_server.serve_forever()
 
 
 class RaidenAPI(object):
@@ -64,17 +96,22 @@ class RaidenAPI(object):
 
     @public
     def get_partner_addresses(self, asset_address=None):
+        """ Retrieve the addresses of all direct payment channel partners.
+        Can be filtered by passing a specific asset address.
+        Returns a flat list of partners"""
+
         from itertools import chain as itertools_chain
 
         if asset_address:
             assetmanager = self.raiden.assetmanagers[asset_address.decode('hex')]
-            partner = [safe_address_encode(address) for address in assetmanager.channels.keys()]
+            partner_encoded = [address.encode('hex')for address in assetmanager.channels.keys()]
         else:
             assetmanagers = self.raiden.assetmanagers.values()
             nested = [assetmanager.channels.keys() for assetmanager in assetmanagers]
-            partner = list(itertools_chain.from_iterable(nested))
-            partner = [safe_address_encode(address) for address in partner]
-        return partner
+            # remove duplicates
+            partner_decoded = list(set(itertools_chain.from_iterable(nested)))
+            partner_encoded = [address.encode('hex') for address in partner_decoded]
+        return partner_encoded
 
     @public
     def transfer(self, asset_address, amount, target, callback=None):
@@ -100,19 +137,12 @@ class RaidenAPI(object):
         transfer_manager.transfer(amount, target, callback=callback)
 
     @public
-    def close_channel(self):
+    def close_channel(self, asset_address, partner_address, callback=None):
         raise NotImplementedError
 
-
     @public
-    def open_channel(self, asset_address, nettingcontract_address, reveal_timeout):
-        asset_manager = self.raiden.get_or_create_asset_manager(asset_address)
-        self.raiden.setup_channel(self,
-                                  asset_manager,
-                                  asset_address,
-                                  nettingcontract_address,
-                                  reveal_timeout
-                                  )
+    def open_channel(self, asset_address, partner_address, reveal_timeout, callback=None):
+        raise NotImplementedError
 
     @public
     def request_transfer(self, asset_address, amount, target):

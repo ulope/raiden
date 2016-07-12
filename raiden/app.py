@@ -10,22 +10,11 @@ import gevent
 from ethereum import slogging
 from ethereum.utils import privtoaddr
 
-from raiden.raiden_service import RaidenService
+from raiden.raiden_service import RaidenService, APIRPCServer
 from raiden.network.discovery import Discovery
 from raiden.network.transport import UDPTransport
 from raiden.network.rpc.client import BlockChainService
 
-
-#### refactor later
-from tinyrpc.server import RPCServer
-from tinyrpc.dispatch import RPCDispatcher
-from tinyrpc.protocols.jsonrpc import JSONRPCProtocol
-import gevent.wsgi
-import gevent.queue
-from tinyrpc.transports.wsgi import WsgiServerTransport
-from tinyrpc.server.gevent import RPCServerGreenlets
-
-#####
 
 log = slogging.get_logger(__name__)  # pylint: disable=invalid-name
 
@@ -41,16 +30,25 @@ class App(object):  # pylint: disable=too-few-public-methods
         # number of blocks that a node requires to learn the secret before the lock expires
         reveal_timeout=3,
         # how long to wait for a transfer until CancelTransfer is sent (time in milliseconds)
-        msg_timeout=100.00
+        msg_timeout=100.00,
+        json_rpc_host='127.0.0.1',
+        json_rpc_port=1337
     )
 
-    def __init__(self, config, chain, discovery, transport_class=UDPTransport):
+    def __init__(self, config, chain, discovery, transport_class=UDPTransport, json_rpc=False):
         self.config = config
         self.discovery = discovery
         self.transport = transport_class(config['host'], config['port'])
         self.raiden = RaidenService(chain, config['privkey'], self.transport, discovery, config)
 
         discovery.register(self.raiden.address, self.transport.host, self.transport.port)
+
+        if json_rpc is True:
+            self.api_rpc_server = APIRPCServer(self,
+                                               config['json_rpc_host'],
+                                               config['json_rpc_port']
+                                               )
+            self.api_rpc_server.start()
 
     def stop(self):
         self.transport.server.start()
@@ -125,27 +123,6 @@ def main():
     app.stop()
 
 
-class RPC_API(object):
-    dispatcher = RPCDispatcher()
-    transport = WsgiServerTransport(queue_class=gevent.queue.Queue)
-
-    def __init__(self, app):
-        self.api = app.raiden.api
-        self.wsgi_server = gevent.wsgi.WSGIServer(('127.0.0.1', 1337), self.transport.handle)
-
-        # call e.g. 'raiden.api.transfer' via JSON RPC
-        print(self.api)
-        self.dispatcher.register_instance(self.api, 'raiden.api.')
-        self.rpc_server = RPCServerGreenlets(
-            self.transport,
-            JSONRPCProtocol(),
-            self.dispatcher
-            )
-        print(self.dispatcher.subdispatchers)
-
-    def start(self):
-        gevent.spawn(self.wsgi_server.serve_forever)
-        self.rpc_server.serve_forever()
 
 
 
