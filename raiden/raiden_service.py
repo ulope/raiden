@@ -1,5 +1,6 @@
 # -*- coding: utf8 -*-
 from ethereum import slogging
+from ethereum.utils import decode_hex, encode_hex
 
 import gevent.wsgi
 import gevent.queue
@@ -22,19 +23,21 @@ from raiden.utils import privtoaddr, isaddress, pex
 log = slogging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
-def safe_address_decode(address):
+def decode_hex_failsafe(address):
     try:
-        address = address.decode('hex')
-    except TypeError:
+        address = decode_hex(address)
+    except TypeError as e:
+        log.debug('Hex decoding error', error=e)
         pass
 
     return address
 
 
-def safe_address_encode(address):
+def encode_hex_failsafe(address):
     try:
-        address = address.encode('hex')
-    except TypeError:
+        address = encode_hex(address)
+    except TypeError as e:
+        log.debug('Hex encoding error', error=e)
         pass
 
     return address
@@ -104,13 +107,13 @@ class RaidenAPI(object):
 
         if asset_address:
             assetmanager = self.raiden.assetmanagers[asset_address.decode('hex')]
-            partner_encoded = [address.encode('hex')for address in assetmanager.channels.keys()]
+            partner_encoded = [encode_hex(address) for address in assetmanager.channels.keys()]
         else:
             assetmanagers = self.raiden.assetmanagers.values()
             nested = [assetmanager.channels.keys() for assetmanager in assetmanagers]
             # remove duplicates
             partner_decoded = list(set(itertools_chain.from_iterable(nested)))
-            partner_encoded = [address.encode('hex') for address in partner_decoded]
+            partner_encoded = [encode_hex(address) for address in partner_decoded]
         return partner_encoded
 
     @public
@@ -121,8 +124,8 @@ class RaidenAPI(object):
         if amount <= 0:
             raise InvalidAmount('Amount negative')
 
-        asset_address = safe_address_decode(asset_address)
-        target = safe_address_decode(target)
+        asset_address = decode_hex_failsafe(asset_address)
+        target = decode_hex_failsafe(target)
 
         if not isaddress(asset_address) or asset_address not in self.assets:
             raise InvalidAddress('asset address is not valid.')
