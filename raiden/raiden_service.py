@@ -5,6 +5,9 @@ from ethereum.utils import decode_hex, encode_hex
 import gevent.wsgi
 import gevent.queue
 
+import gevent.wsgi
+import gevent.queue
+
 from tinyrpc.dispatch import public
 from tinyrpc.server import RPCServer
 from tinyrpc.dispatch import RPCDispatcher
