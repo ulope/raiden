@@ -2,8 +2,9 @@
 # -*- coding: utf-8
 import json
 from ethereum import tester
-from ethereum.utils import privtoaddr, remove_0x_head
+from ethereum.utils import remove_0x_head
 from raiden.blockchain.abi import get_contract_path
+from raiden.utils import privatekey_to_address
 
 from ethereum import slogging
 slogging.configure(":INFO")
@@ -17,7 +18,7 @@ TARGETS = dict(
 )
 
 DEFAULT_KEY = ('1' * 64).decode('hex')
-DEFAULT_ACCOUNT = privtoaddr(DEFAULT_KEY)
+DEFAULT_ACCOUNT = privatekey_to_address(DEFAULT_KEY)
 
 
 def deploy_all(token_groups=dict()):
@@ -103,11 +104,15 @@ def create_and_distribute_token(state,
 def deploy_with_dependencies(contract_name, state, libraries=dict()):
     dependencies = find_dependencies(
         get_contract_path(contract_name))
-    [libraries.pop(key) for key in libraries.keys() if not key in
-     [d.split('.')[0] for d in dependencies]]
+
+    dependency_names = [d.split('.')[0] for d in dependencies]
+    for key in list(libraries.keys()):
+        if not key in dependency_names:
+            libraries.pop(key)
+
     log.DEV("in deploy_with_dependencies", contract=contract_name, dependencies=dependencies)
     for dependency in dependencies:
-        # FIXME: this should not be needed!?
+        # 'Contract's are included in 'Registry' and should not be deployed alone
         if 'Contract' in dependency:
             continue
 
@@ -122,15 +127,18 @@ def deploy_with_dependencies(contract_name, state, libraries=dict()):
                                       )
         libraries[dependency.split('.')[0]] = deployed.address.encode('hex')
         state.mine()
+
     log.DEV('deploying target', name=contract_name)
     log.DEV('known libraries', libraries=libraries)
-    contract = state.abi_contract(None,
-                                  path=get_contract_path(contract_name),
-                                  listen=False,
-                                  language='solidity',
-                                  libraries=libraries,
-                                  sender=DEFAULT_KEY,
-                                  )
+
+    contract = state.abi_contract(
+        None,
+        path=get_contract_path(contract_name),
+        language='solidity',
+        libraries=libraries,
+        sender=DEFAULT_KEY,
+    )
+
     libraries[contract_name.split('.')[0]] = contract.address.encode('hex')
     state.mine()
     return libraries
