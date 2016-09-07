@@ -224,6 +224,12 @@ class SecretRequest(SignedMessage):
         super(SecretRequest, self).__init__()
         self.hashlock = hashlock
 
+    def __repr__(self):
+        return '<{} [hashlock:{}]>'.format(
+            self.__class__.__name__,
+            pex(self.hashlock),
+        )
+
     @staticmethod
     def unpack(packed):
         secret_request = SecretRequest(packed.hashlock)
@@ -243,6 +249,13 @@ class Secret(SignedMessage):
         super(Secret, self).__init__()
         self.secret = secret
         self._hashlock = None
+
+    def __repr__(self):
+        return '<{} [hashlock:{} hash:{}]>'.format(
+            self.__class__.__name__,
+            pex(self.hashlock),
+            pex(self.hash),
+        )
 
     @property
     def hashlock(self):
