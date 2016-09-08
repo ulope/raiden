@@ -50,6 +50,11 @@
     # Collect instance id: http://stackoverflow.com/a/27307254
     - action: ec2_facts
 
+    - name: overwrite scenario_runner.py from local version (for testing)
+      copy:
+        src: "../scenario_runner.py"
+        dest: "{{ scenario_runner }}"
+
     - name: configured raiden_ports
       find:
         patterns: "4*"
@@ -68,8 +73,9 @@
     #    - "{{ raiden_ports }}"
 
     - name: update repository if asked (set `-e force_pull=True`)
-      shell: "git pull --rebase"
-      chdir: "{{ raiden_dir }}"
+      shell:
+        cmd: "git pull --rebase"
+        chdir: "{{ raiden_dir }}"
       when: force_pull is defined
 
     - name: execute raidens asynchronously
