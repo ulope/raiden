@@ -90,9 +90,7 @@ def run(ctx, scenario, **kwargs):
                 for _ in xrange(total_transfers):
                     app.raiden.transfer(token_address, amount_per_transfer, peer)
 
-            return gevent.spawn(
-                transfer, amount_per_transfer, peer
-            )
+            return gevent.spawn(transfer_)
 
         log.info("transfers_by_channel: {}".format(transfers_by_channel))
 
