@@ -27,8 +27,8 @@ API_URL_CHANNELS = "http://{}/api/1/channels"
 @click.option("--port", default=8545)
 @click.argument("token-address")
 @click.argument("private-key")
-@click.argument("nodes", nargs=-1)
-def main(token_address, private_key, nodes, ensure_supply, supply, host, port):
+@click.argument("raiden-nodes", nargs=-1)
+def main(token_address, private_key, raiden_nodes, ensure_supply, supply, host, port):
     token_address = token_address.lower()
 
     if not token_address.startswith('0x'):
@@ -49,13 +49,13 @@ def main(token_address, private_key, nodes, ensure_supply, supply, host, port):
     with open("token.abi") as f:
         token_ctr = client.new_contract_proxy(json.load(f), token_address)
 
-    addresses = {}
-    balances = {}
+    node_to_address = {}
+    address_to_balance = {}
     txhashes = []
-    for node in nodes:
-        address = addresses[node] = requests.get(
+    for node in raiden_nodes:
+        address = node_to_address[node] = requests.get(
             API_URL_ADDRESS.format(node)).json()['our_address'].lower()
-        balance = balances[address] = token_ctr.balanceOf(address)
+        balance = address_to_balance[address] = token_ctr.balanceOf(address)
         if ensure_supply and balance < supply:
             supply_balance = supply - balance
             log.info("Supplying %d tokens to %s (%s)", supply_balance, node, address)
@@ -72,15 +72,13 @@ def main(token_address, private_key, nodes, ensure_supply, supply, host, port):
 
     registered_tokens = [
         t['address'].lower()
-        for t in requests.get(API_URL_TOKENS.format(nodes[0])).json()
+        for t in requests.get(API_URL_TOKENS.format(raiden_nodes[0])).json()
     ]
 
     if token_address not in registered_tokens:
         try:
             log.info("Registering token with network")
-            url = "{}/{}".format(API_URL_TOKENS.format(nodes[0]), token_address)
-            log.debug("url: %s", url)
-            resp = requests.put(url)
+            resp = requests.put("{}/{}".format(API_URL_TOKENS.format(raiden_nodes[0]), token_address))
             code = resp.status_code
             msg = resp.text
         except RequestException as ex:
@@ -90,22 +88,24 @@ def main(token_address, private_key, nodes, ensure_supply, supply, host, port):
             log.error("Couldn't register token with network: %d %s", code, msg)
             return
 
-    for i, node in enumerate(nodes):
-        partner_node = nodes[(i + 1) % len(nodes)]
-        partner_address = addresses[node]
+    for i, node in enumerate(raiden_nodes):
+        partner_node = raiden_nodes[(i + 1) % len(raiden_nodes)]
+        partner_address = node_to_address[partner_node]
         channel_partners = requests.get(API_URL_TOKEN_PARTNERS.format(node, token_address)).json()
         for channel_partner in channel_partners:
             if channel_partner['partner_address'].lower() == partner_address:
+                log.info("Reusing existing channel %s (%s) -> %s (%s)",
+                         node, node_to_address[node], partner_node, partner_address)
                 break
         else:
             log.info("Creating channel %s (%s) -> %s (%s)",
-                     node, addresses[node], partner_node, partner_address)
+                     node, node_to_address[node], partner_node, partner_address)
             requests.put(
-                API_URL_CHANNELS,
+                API_URL_CHANNELS.format(node),
                 json=dict(
                     partner_address=partner_address,
                     token_address=token_address,
-                    balance=balances[addresses[node]]
+                    balance=address_to_balance[node_to_address[node]]
                 )
             )
 
