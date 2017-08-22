@@ -1,6 +1,7 @@
 #!/usr/bin/env python2
 import random
 import uuid
+from collections import defaultdict
 
 import click
 import logging
@@ -20,7 +21,7 @@ log = slogging.getLogger("scenario")
 
 TOKEN_BALANCE_MIN = 5 * 10 ** 4
 
-TIMEOUT = 600
+TIMEOUT = 120
 
 API_URL_ADDRESS = "http://{}/api/1/address"
 API_URL_TOKENS = "http://{}/api/1/tokens"
@@ -147,6 +148,15 @@ def main(scenario_file, raiden_nodes, private_key, host, port):
 
     log.info("Active nodes", nodes=active_nodes)
     raiden_nodes = active_nodes
+
+    excpected_amounts = defaultdict(int)
+
+    delay_min = scenario.get('delay_min', 2)
+    delay_max = scenario.get('delay_min', 20)
+
+    iterations = scenario.get('interations', 0)
+    i = 0
+
     while True:
         for node in raiden_nodes:
             partner_node = None
@@ -157,6 +167,7 @@ def main(scenario_file, raiden_nodes, private_key, host, port):
             url = API_URL_TRANSFERS.format(node, token_address, partner_address)
             amount = random.randint(1, 5)
             log.info("Transfering", from_=node, to=partner_node, amount=amount)
+            excpected_amounts[partner_node] += amount
             try:
                 resp = requests.post(url, json=dict(amount=amount), timeout=TIMEOUT)
                 code = resp.status_code
@@ -168,10 +179,16 @@ def main(scenario_file, raiden_nodes, private_key, host, port):
                 log.error("Couldn't transfer: %d %s", code, msg)
                 continue
 
-            time.sleep(random.randint(5, 20))
+            time.sleep(random.randint(delay_min, delay_max))
+        i += 1
+        if i >= iterations:
+            break
+
+    log.info("Expected transfers", amounts=dict(excpected_amounts))
 
 
 if __name__ == "__main__":
+    slogging.PRINT_FORMAT = '%(asctime)s %(levelname)s: %(name)s\t%(message)s'
     slogging.configure(":debug")
     # Fix pyethapp.rpc_client not using slogging library
     rpc_logger = logging.getLogger('pyethapp.rpc_client')
