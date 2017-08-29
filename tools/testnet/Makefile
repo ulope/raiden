@@ -48,7 +48,7 @@ docker-mk-raiden:
 	docker build -t brainbot/raiden $(nocache_arg) $(repo_arg) $(branch_arg) files/dockerfiles/raiden
 
 docker-mk-transfer-generator:
-	docker build -t brainbot/transfer-generator $(NOCACHE) files/dockerfiles/transfer_generator
+	docker build -t brainbot/transfer-generator $(nocache_arg) files/dockerfiles/transfer_generator
 
 docker-push-geth: docker-mk-geth aws-ecr-login
 	docker tag brainbot/geth-testnet 147258760518.dkr.ecr.us-east-1.amazonaws.com/brainbot/geth-testnet
