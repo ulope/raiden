@@ -32,7 +32,7 @@ def test_event_transfer_received_success(
             amount,
             receiver_app.raiden.address,
         )
-        transfer_event.wait()
+        transfer_event.wait(timeout=20)
         expected[app.raiden.address] = amount
 
     initiators = list()
@@ -80,7 +80,7 @@ def test_echo_node_response(
             echo_app.raiden.address,
             10 ** (num + 1)
         )
-        transfer_event.wait()
+        transfer_event.wait(timeout=20)
         expected.append(amount)
 
     while len(echo_node.handled_transfers) < len(expected):
