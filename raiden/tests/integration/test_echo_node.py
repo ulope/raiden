@@ -27,7 +27,7 @@ def test_event_transfer_received_success(
 
     for num, app in enumerate([app0, app1, app2]):
         amount = 1 + num
-        transfer_event = app.raiden.transfer_async(
+        transfer_event = RaidenAPI(app.raiden).transfer_async(
             token_address,
             amount,
             receiver_app.raiden.address,
@@ -74,7 +74,7 @@ def test_echo_node_response(
     # Create some transfers
     for num, app in enumerate([app0, app1, app2]):
         amount = 1 + num
-        transfer_event = app.raiden.transfer_async(
+        transfer_event = RaidenAPI(app.raiden).transfer_async(
             token_address,
             amount,
             echo_app.raiden.address,
