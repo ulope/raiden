@@ -87,6 +87,7 @@ class EchoNode(object):
         It polls all channels for `EventTransferReceivedSuccess` events,
         adds all new events to the `self.received_transfers` queue and
         spawns an `self.echo_node_worker`, if there were new events. """
+        log.DEV('poll_all_received_events')
 
         with self.lock:
             channels = self.api.get_channel_list(token_address=self.token_address)
@@ -101,6 +102,7 @@ class EchoNode(object):
                     if event['_event_type'] == 'EventTransferReceivedSuccess'
                 ])
             if received_transfers:
+                log.DEV('transfers received', num=len(received_transfers))
                 self.last_poll_block = max(
                     event['block_number']
                     for event in received_transfers
@@ -108,11 +110,13 @@ class EchoNode(object):
             for transfer in received_transfers:
                 self.received_transfers.put(transfer)
             if len(received_transfers):
+                log.DEV('spawning echo worker')
                 self.greenlets.append(gevent.spawn(self.echo_worker))
 
     def echo_worker(self):
         """ The `echo_worker` works through the `self.received_transfers` queue and spawns
         `self.on_transfer` greenlets for all transfers. """
+        log.DEV('echo worker', qsize=self.received_transfers.qsize())
         while self.stop_signal is None and self.received_transfers.qsize() > 0:
             transfer = self.received_transfers.get()
             self.greenlets.append(gevent.spawn(self.on_transfer, transfer))
@@ -129,6 +133,7 @@ class EchoNode(object):
             (from the 7 lucky addresses) [NOT YET IMPLEMENTED]
             - for all other transfers it sends a transfer with the same `amount` back to the
             initiator """
+        log.DEV('on_transfer')
         echo_amount = 0
         if transfer in self.handled_transfers:
             log.DEV(

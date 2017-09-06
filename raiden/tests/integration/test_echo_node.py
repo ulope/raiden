@@ -2,10 +2,15 @@
 import pytest
 import gevent
 
+from ethereum import slogging
+
 from raiden.utils.echo_node import EchoNode
 from raiden.api.python import RaidenAPI
 from raiden.tests.utils.network import CHAIN
 from raiden.tests.utils import get_channel_events_for_token
+
+
+log = slogging.getLogger(__name__)
 
 
 # `RaidenAPI.get_channel_events` is not supported in tester
@@ -86,6 +91,11 @@ def test_echo_node_response(
         expected.append(amount)
 
     while len(echo_node.handled_transfers) < len(expected):
+        log.DEV(
+            'not all transfers received yet',
+            num=len(echo_node.handled_transfers),
+            expected=len(expected)
+        )
         gevent.sleep(.5)
 
     # Check that all transfers were handled correctly
