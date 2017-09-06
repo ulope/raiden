@@ -104,7 +104,7 @@ class EchoNode(object):
                 self.last_poll_block = max(
                     event['block_number']
                     for event in received_transfers
-                ) + 1
+                )
             for transfer in received_transfers:
                 self.received_transfers.put(transfer)
             if len(received_transfers):
