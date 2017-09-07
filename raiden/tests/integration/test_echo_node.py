@@ -76,6 +76,10 @@ def test_echo_node_response(
     echo_node.ready.wait(timeout=30)
     assert echo_node.ready.is_set()
 
+    # DEBUGGING
+    start_block = echo_app.raiden.get_block_number()
+    # /DEBUGGING
+
     expected = list()
 
     # Create some transfers
@@ -89,6 +93,20 @@ def test_echo_node_response(
         )
         transfer_event.wait(timeout=20)
         expected.append(amount)
+
+    # DEBUGGING: manually check for received events
+    echo_has_received = []
+    initiators = []
+
+    events = get_channel_events_for_token(echo_app, token_address, start_block)
+    for event in events:
+        if event['_event_type'] == 'EventTransferReceivedSuccess':
+            echo_has_received.append(event)
+            initiators.append(event['initiator'])
+
+    assert len(echo_has_received) == 3
+    assert len(initiators) == 3
+    # /DEBUGGING
 
     while len(echo_node.handled_transfers) < len(expected):
         log.DEV(
