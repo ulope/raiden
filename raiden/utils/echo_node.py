@@ -3,8 +3,9 @@ from collections import deque
 
 import gevent
 from gevent.queue import Queue
-from gevent.lock import Semaphore
+from gevent.lock import BoundedSemaphore
 from gevent.event import Event
+from gevent.timeout import Timeout
 from ethereum import slogging
 import click
 
@@ -63,7 +64,7 @@ class EchoNode(object):
         self.received_transfers = Queue()
         self.stop_signal = None  # used to signal REMOVE_CALLBACK and stop echo_workers
         self.greenlets = list()
-        self.lock = Semaphore()
+        self.lock = BoundedSemaphore()
         self.handled_transfers = deque(list(), TRANSFER_MEMORY)
         # register ourselves with the raiden alarm task
         self.api.raiden.alarm.register_callback(self.echo_node_alarm_callback)
@@ -87,31 +88,43 @@ class EchoNode(object):
         It polls all channels for `EventTransferReceivedSuccess` events,
         adds all new events to the `self.received_transfers` queue and
         spawns an `self.echo_node_worker`, if there were new events. """
-        log.DEV('poll_all_received_events')
 
-        with self.lock:
-            channels = self.api.get_channel_list(token_address=self.token_address)
-            received_transfers = list()
-            for channel in channels:
-                channel_events = self.api.get_channel_events(
-                    channel.channel_address,
-                    self.last_poll_block
-                )
-                received_transfers.extend([
-                    event for event in channel_events
-                    if event['_event_type'] == 'EventTransferReceivedSuccess'
-                ])
-            if received_transfers:
-                log.DEV('transfers received', num=len(received_transfers))
-                self.last_poll_block = max(
-                    event['block_number']
-                    for event in received_transfers
-                )
-            for transfer in received_transfers:
-                self.received_transfers.put(transfer)
-            if len(received_transfers):
-                log.DEV('spawning echo worker')
-                self.greenlets.append(gevent.spawn(self.echo_worker))
+        log.DEV('poll_all_received_events')
+        locked = False
+
+        try:
+            with Timeout(10):
+                locked = self.lock.acquire(blocking=False)
+                if not locked:
+                    return
+                else:
+                    channels = self.api.get_channel_list(token_address=self.token_address)
+                    received_transfers = list()
+                    for channel in channels:
+                        channel_events = self.api.get_channel_events(
+                            channel.channel_address,
+                            self.last_poll_block
+                        )
+                        received_transfers.extend([
+                            event for event in channel_events
+                            if event['_event_type'] == 'EventTransferReceivedSuccess'
+                        ])
+                    if received_transfers:
+                        log.DEV('transfers received', num=len(received_transfers))
+                        self.last_poll_block = max(
+                            event['block_number']
+                            for event in received_transfers
+                        )
+                    for transfer in received_transfers:
+                        self.received_transfers.put(transfer)
+                    if len(received_transfers):
+                        log.DEV('spawning echo worker')
+                        self.greenlets.append(gevent.spawn(self.echo_worker))
+        except Timeout:
+            log.DEV('timeout while polling for events')
+        finally:
+            if locked:
+                self.lock.release()
 
     def echo_worker(self):
         """ The `echo_worker` works through the `self.received_transfers` queue and spawns
