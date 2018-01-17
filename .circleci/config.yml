@@ -45,8 +45,6 @@ jobs:
             - source-{{ .Branch }}-
             - source-
       - restore_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
-      - restore_cache:
           keys:
             - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-{{ .Branch }}
             - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-
@@ -59,6 +57,8 @@ jobs:
           key: source-{{ .Branch }}-{{ .Revision }}
           paths:
             - ".git"
+      - restore_cache:
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
       - run:
           name: create virtualenv
           command: '[[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv'
