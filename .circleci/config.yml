@@ -91,17 +91,16 @@ jobs:
       - run:
           name: install dependencies
           command: |
-            . ~/venv/bin/activate
-            pip install -U pip wheel
-            pip install readme_renderer pyinstaller
-            pip install -r requirements-dev.txt
-            pip install -e .
+            ~/venv/bin/pip install -U pip wheel
+            ~/venv/bin/pip install readme_renderer pyinstaller
+            ~/venv/bin/pip install -r requirements-dev.txt
+            ~/venv/bin/pip install -e .
       - save_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/venv/bin/python" }}
           paths:
             - "~/venv"
       - save_cache:
-          key: pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-{{ .Branch }}
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ .Branch }}
           paths:
             - "~/.cache/pip"
       - persist_to_workspace:
