@@ -17,7 +17,7 @@ templates:
           command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
       - run:
           name: run tests
-          command: coverage run -m py.test --travis-fold=always -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+          command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
 
 jobs:
   prepare_workspace:
@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - run:
-          name: prepare environment
+          name: Preparing environment
           # Workaround to enable using env variables in cache keys
           command: |
             echo ${GETH_VERSION} > ~/.env-GETH_VERSION
@@ -44,12 +44,6 @@ jobs:
             - source-{{ .Branch }}-{{ .Revision }}
             - source-{{ .Branch }}-
             - source-
-      - restore_cache:
-          keys:
-            - pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ .Branch }}
-            - pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-
-      - restore_cache:
-          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
 
       - checkout
 
@@ -57,16 +51,10 @@ jobs:
           key: source-{{ .Branch }}-{{ .Revision }}
           paths:
             - ".git"
-#      - restore_cache:
-#          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
+      - restore_cache:
+          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
       - run:
-          name: create virtualenv
-          command: |
-            ls -l ~
-            [[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv || true
-            cat ~/venv/pyvenv.cfg
-      - run:
-          name: install system dependencies
+          name: Installing system dependencies
           command: |
             GETH_PATH="${HOME}/.local/bin/geth-${OS_NAME}-${GETH_VERSION}"
             if [ ! -x ${GETH_PATH} ]; then
@@ -91,8 +79,18 @@ jobs:
           key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
           paths:
             - "~/.local"
+      - restore_cache:
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
+      - restore_cache:
+          keys:
+            - 'python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-'
       - run:
-          name: install dependencies
+          name: Creating virtualenv
+          command: |
+            [[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv-${PYTHON_VERSION} || true
+      - run:
+          name: Installing dependencies
           command: |
             env
             echo $PYTHONPATH
@@ -104,11 +102,11 @@ jobs:
             pip install -r requirements-dev.txt
             pip install -e .
       - save_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
+          key: python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
           paths:
             - "~/venv"
       - save_cache:
-          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ .Branch }}
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
           paths:
             - "~/.cache/pip"
       - persist_to_workspace:
