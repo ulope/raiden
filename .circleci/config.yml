@@ -109,7 +109,7 @@ jobs:
           paths:
             - "~/.cache/pip"
       - persist_to_workspace:
-          root: "."
+          root: "~"
           paths:
             - .cache/pip
             - .local
