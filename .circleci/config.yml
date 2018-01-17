@@ -138,12 +138,12 @@ templates:
           name: Configuring PATH
           command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
       - restore_cache:
-          key: ethash-{{ checksum "~/.env-GETH_VERSION" }}
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
       - run:
           name: Running tests
           command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
       - save_cache:
-          key: ethash-{{ checksum "~/.env-GETH_VERSION" }}
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
           paths:
             - "~/.ethash"
 
