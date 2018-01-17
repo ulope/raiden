@@ -11,7 +11,7 @@ templates:
     <<: *job-base-template
     steps:
       - attach_workspace:
-          to: .
+          to: "~"
       - run:
           name: setup path
           command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
@@ -111,7 +111,6 @@ jobs:
       - persist_to_workspace:
           root: "~"
           paths:
-            - .cache/pip
             - .local
             - raiden
             - venv
@@ -119,7 +118,7 @@ jobs:
     <<: *job-base-template
     steps:
       - attach_workspace:
-          to: .
+          to: "~"
       - run:
           name: setup path
           command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
