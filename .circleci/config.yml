@@ -58,16 +58,16 @@ jobs:
           paths:
             - ".git"
       - restore_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/venv/bin/python" }}
       - run:
           name: create virtualenv
           command: '[[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv'
       - run:
           name: install system dependencies
           command: |
-            GETH_PATH="~/.local/bin/geth-${OS_NAME}-${GETH_VERSION}"
+            GETH_PATH="${HOME}/.local/bin/geth-${OS_NAME}-${GETH_VERSION}"
             if [ ! -x ${GETH_PATH} ]; then
-              mkdir -p ~/.local/bin
+              mkdir -p ${HOME}/.local/bin
               TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'gethtmp')
               pushd ${TEMP}
               wget -O geth.tar.gz ${GETH_URL_LINUX}
@@ -75,15 +75,15 @@ jobs:
               cd geth*/
               install -m 755 geth ${GETH_PATH}
             fi
-            ln -sf ${GETH_PATH} ~/.local/bin/geth
+            ln -sf ${GETH_PATH} ${HOME}/.local/bin/geth
 
-            SOLC_PATH="~/.local/bin/solc-${OS_NAME}-${SOLC_VERSION}"
+            SOLC_PATH="${HOME}/.local/bin/solc-${OS_NAME}-${SOLC_VERSION}"
             if [ ! -x ${SOLC_PATH} ]; then
-              mkdir -p ~/.local/bin
+              mkdir -p ${HOME}/.local/bin
               curl -L ${SOLC_URL_LINUX} > ${SOLC_PATH}
               chmod 775 ${SOLC_PATH}
-            else
-            ln -sf ${SOLC_PATH} ~/.local/bin/solc
+            fi
+            ln -sf ${SOLC_PATH} ${HOME}/.local/bin/solc
       - save_cache:
           key: system-deps-{{ checksum ".env-GETH_VERSION" }}-{{ checksum ".env-GETH_VERSION" }}
           paths:
