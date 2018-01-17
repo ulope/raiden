@@ -135,11 +135,17 @@ templates:
       - attach_workspace:
           at: "~"
       - run:
-          name: setup path
+          name: Configuring PATH
           command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - restore_cache:
+          key: ethash-{{ checksum "~/.env-GETH_VERSION" }}
       - run:
-          name: run tests
+          name: Running tests
           command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+      - save_cache:
+          key: ethash-{{ checksum "~/.env-GETH_VERSION" }}
+          paths:
+            - "~/.ethash"
 
 jobs:
   prepare-workspace-35:
@@ -239,49 +245,51 @@ jobs:
 
 workflows:
   version: 2
-  prepare-check-test:
+  prepare-check-test-35:
     jobs:
       - prepare-workspace-35
-      - prepare-workspace-36
       - check-35:
           requires:
             - prepare-workspace-35
-      - check-36:
-          requires:
-            - prepare-workspace-36
       - test-unit-35:
           requires:
             - check-35
-      - test-unit-36:
-          requires:
-            - check-36
       - test-smartcontracts-35:
           requires:
             - check-35
-      - test-smartcontracts-36:
-          requires:
-            - check-36
       - test-property-35:
           requires:
             - check-35
-      - test-property-36:
-          requires:
-            - check-36
       - test-integration-35:
           requires:
             - check-35
-      - test-integration-36:
-          requires:
-            - check-36
       - test-long-running-35:
           requires:
             - check-35
-      - test-long-running-36:
-          requires:
-            - check-36
       - test-api-35:
           requires:
             - check-35
+  prepare-check-test-36:
+    jobs:
+      - prepare-workspace-36
+      - check-36:
+          requires:
+            - prepare-workspace-36
+      - test-unit-36:
+          requires:
+            - check-36
+      - test-smartcontracts-36:
+          requires:
+            - check-36
+      - test-property-36:
+          requires:
+            - check-36
+      - test-integration-36:
+          requires:
+            - check-36
+      - test-long-running-36:
+          requires:
+            - check-36
       - test-api-36:
           requires:
             - check-36
