@@ -148,12 +148,6 @@ templates:
             - "~/.ethash"
 
 jobs:
-  dummy:
-    <<: *job-base-template
-    steps:
-      run:
-        command: echo 1
-
   prepare-workspace-35:
     <<: *job-prepare-template
     docker:
@@ -253,11 +247,7 @@ workflows:
   version: 2
   prepare-check-test:
     jobs:
-      - dummy
-
-      - prepare-workspace-35:
-          requires:
-            - dummy
+      - prepare-workspace-35
       - check-35:
           requires:
             - prepare-workspace-35
@@ -280,9 +270,7 @@ workflows:
           requires:
             - check-35
 
-      - prepare-workspace-36:
-          requires:
-            - dummy
+      - prepare-workspace-36
       - check-36:
           requires:
             - prepare-workspace-36
