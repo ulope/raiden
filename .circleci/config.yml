@@ -57,8 +57,8 @@ jobs:
           key: source-{{ .Branch }}-{{ .Revision }}
           paths:
             - ".git"
-      - restore_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
+#      - restore_cache:
+#          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
       - run:
           name: create virtualenv
           command: |
