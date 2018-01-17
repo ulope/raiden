@@ -3,7 +3,7 @@ version: 2
 # This is used as a template for the actual jobs and not actually being run itself
 templates:
   job-base-template: &job-base-template
-    working_directory: ~/raiden2
+    working_directory: ~/raiden
     docker:
       - image: circleci/python:3.6
 
@@ -35,9 +35,9 @@ jobs:
           name: prepare environment
           # Workaround to enable using env variables in cache keys
           command: |
-            echo ${GETH_VERSION} > .env-GETH_VERSION
-            echo ${SOLC_VERSION} > .env-SOLC_VERSION
-            echo ${PYTHON_VERSION} > .env-PYTHON_VERSION
+            echo ${GETH_VERSION} > ~/.env-GETH_VERSION
+            echo ${SOLC_VERSION} > ~/.env-SOLC_VERSION
+            echo ${PYTHON_VERSION} > ~/.env-PYTHON_VERSION
             echo "export OS_NAME=$(uname -s)" >> ${BASH_ENV}
       - restore_cache:
           keys:
@@ -46,10 +46,10 @@ jobs:
             - source-
       - restore_cache:
           keys:
-            - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-{{ .Branch }}
-            - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-
+            - pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ .Branch }}
+            - pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}-
       - restore_cache:
-          key: system-deps-{{ checksum ".env-GETH_VERSION" }}-{{ checksum ".env-GETH_VERSION" }}
+          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
 
       - checkout
 
