@@ -3,7 +3,7 @@ version: 2
 # This is used as a template for the actual jobs and not actually being run itself
 templates:
   job-base-template: &job-base-template
-    working_directory: ~/raiden
+    working_directory: ~/raiden2
     docker:
       - image: circleci/python:3.6
 
