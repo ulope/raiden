@@ -7,20 +7,7 @@ templates:
     docker:
       - image: circleci/python:3.6
 
-  job-test-template: &job-test-template
-    <<: *job-base-template
-    steps:
-      - attach_workspace:
-          at: "~"
-      - run:
-          name: setup path
-          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
-      - run:
-          name: run tests
-          command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
-
-jobs:
-  prepare_workspace:
+  job-prepare-template: &job-prepare-template
     <<: *job-base-template
     environment:
       GETH_URL_LINUX: 'https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-1.7.2-1db4ecdc.tar.gz'
@@ -83,28 +70,34 @@ jobs:
           key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
       - restore_cache:
           keys:
-            - 'python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
-            - 'python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-'
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-'
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-'
       - run:
           name: Creating virtualenv
           command: |
-            [[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv || true
+            if [ ! -x ~/venv/bin/python ]; then
+              python -m venv ~/venv-${PYTHON_VERSION%.*}
+            fi
+            echo 'export VENV_PATH="$HOME/venv-${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
       - run:
           name: Installing dependencies
           command: |
-            env
             echo $PYTHONPATH
-            . ~/venv/bin/activate
-            env
-            echo $PYTHONPATH
+            . ${VENV_PATH}/bin/activate
             pip install -U pip wheel
             pip install readme_renderer pyinstaller
             pip install -r requirements-dev.txt
             pip install -e .
       - save_cache:
-          key: python-deps-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          key: python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
           paths:
-            - "~/venv"
+            - "~/venv-3.5"
+      - save_cache:
+          key: python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - "~/venv-3.6"
       - save_cache:
           key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
           paths:
@@ -114,15 +107,17 @@ jobs:
           paths:
             - .local
             - raiden
-            - venv
-  check:
+            - venv-3.5
+            - venv-3.6
+
+  job-check-template: &job-check-template
     <<: *job-base-template
     steps:
       - attach_workspace:
           at: "~"
       - run:
           name: setup path
-          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
       - run:
           name: check flake8
           command: flake8 raiden/ tools/
@@ -132,6 +127,36 @@ jobs:
       - run:
           name: raiden smoketest
           command: raiden smoketest
+
+
+  job-test-template: &job-test-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: setup path
+          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - run:
+          name: run tests
+          command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+
+jobs:
+  prepare-workspace-35:
+    <<: *job-prepare-template
+    docker:
+      - image: circleci/python:3.5
+
+  prepare-workspace-36:
+    <<: *job-prepare-template
+
+  check-35:
+    <<: *job-check-template
+    docker:
+      - image: circleci/python:3.5
+
+  check-36:
+    <<: *job-check-template
 
   test-unit-35:
     <<: *job-test-template
@@ -216,43 +241,47 @@ workflows:
   version: 2
   prepare-check-test:
     jobs:
-      - prepare_workspace
-      - check:
+      - prepare-workspace-35
+      - prepare-workspace-36
+      - check-35:
           requires:
-            - prepare_workspace
+            - prepare-workspace-35
+      - check-36:
+          requires:
+            - prepare-workspace-36
       - test-unit-35:
           requires:
-            - check
+            - check-35
       - test-unit-36:
           requires:
-            - check
+            - check-36
       - test-smartcontracts-35:
           requires:
-            - check
+            - check-35
       - test-smartcontracts-36:
           requires:
-            - check
+            - check-36
       - test-property-35:
           requires:
-            - check
+            - check-35
       - test-property-36:
           requires:
-            - check
+            - check-36
       - test-integration-35:
           requires:
-            - check
+            - check-35
       - test-integration-36:
           requires:
-            - check
+            - check-36
       - test-long-running-35:
           requires:
-            - check
+            - check-35
       - test-long-running-36:
           requires:
-            - check
+            - check-36
       - test-api-35:
           requires:
-            - check
+            - check-35
       - test-api-36:
           requires:
-            - check
+            - check-36
