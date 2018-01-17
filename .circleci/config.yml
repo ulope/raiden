@@ -136,7 +136,7 @@ templates:
           at: "~"
       - run:
           name: setup path
-          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
       - run:
           name: run tests
           command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
