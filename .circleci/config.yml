@@ -61,7 +61,9 @@ jobs:
           key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
       - run:
           name: create virtualenv
-          command: '[[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv || true'
+          command: |
+            [[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv || true
+            cat ~/venv/pyvenv.cfg
       - run:
           name: install system dependencies
           command: |
