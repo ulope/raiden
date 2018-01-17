@@ -58,7 +58,7 @@ jobs:
           paths:
             - ".git"
       - restore_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/venv/bin/python" }}
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
       - run:
           name: create virtualenv
           command: '[[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv'
@@ -85,18 +85,23 @@ jobs:
             fi
             ln -sf ${SOLC_PATH} ${HOME}/.local/bin/solc
       - save_cache:
-          key: system-deps-{{ checksum ".env-GETH_VERSION" }}-{{ checksum ".env-GETH_VERSION" }}
+          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
           paths:
             - "~/.local"
       - run:
           name: install dependencies
           command: |
-            ~/venv/bin/pip install -U pip wheel
-            ~/venv/bin/pip install readme_renderer pyinstaller
-            ~/venv/bin/pip install -r requirements-dev.txt
-            ~/venv/bin/pip install -e .
+            env
+            echo $PYTHONPATH
+            . ~/venv/bin/activate
+            env
+            echo $PYTHONPATH
+            pip install -U pip wheel
+            pip install readme_renderer pyinstaller
+            pip install -r requirements-dev.txt
+            pip install -e .
       - save_cache:
-          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/venv/bin/python" }}
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "~/.env-PYTHON_VERSION" }}
           paths:
             - "~/venv"
       - save_cache:
