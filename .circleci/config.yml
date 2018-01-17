@@ -1,0 +1,254 @@
+version: 2
+
+# This is used as a template for the actual jobs and not actually being run itself
+templates:
+  job-base-template: &job-base-template
+    working_directory: ~/raiden
+    docker:
+      - image: circleci/python:3.6
+
+  job-test-template: &job-test-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          to: .
+      - run:
+          name: setup path
+          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - run:
+          name: run tests
+          command: coverage run -m py.test --travis-fold=always -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+
+jobs:
+  prepare_workspace:
+    <<: *job-base-template
+    environment:
+      GETH_URL_LINUX: 'https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-1.7.2-1db4ecdc.tar.gz'
+      GETH_URL_MACOS: 'https://gethstore.blob.core.windows.net/builds/geth-darwin-amd64-1.7.2-1db4ecdc.tar.gz'
+      GETH_VERSION: '1.7.2'
+      SOLC_URL_LINUX: 'https://github.com/ethereum/solidity/releases/download/v0.4.18/solc-static-linux'
+      SOLC_URL_MACOS: 'https://www.dropbox.com/s/21xuco6djjpdwd4/solc_0.4.18?dl=0'
+      SOLC_VERSION: 'v0.4.18'
+
+    steps:
+      - run:
+          name: prepare environment
+          # Workaround to enable using env variables in cache keys
+          command: |
+            echo ${GETH_VERSION} > .env-GETH_VERSION
+            echo ${SOLC_VERSION} > .env-SOLC_VERSION
+            echo ${PYTHON_VERSION} > .env-PYTHON_VERSION
+            echo "export OS_NAME=$(uname -s)" >> ${BASH_ENV}
+      - restore_cache:
+          keys:
+            - source-{{ .Branch }}-{{ .Revision }}
+            - source-{{ .Branch }}-
+            - source-
+      - restore_cache:
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
+      - restore_cache:
+          keys:
+            - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-{{ .Branch }}
+            - pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-
+      - restore_cache:
+          key: system-deps-{{ checksum ".env-GETH_VERSION" }}-{{ checksum ".env-GETH_VERSION" }}
+
+      - checkout
+
+      - save_cache:
+          key: source-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ".git"
+      - run:
+          name: create virtualenv
+          command: '[[ ! -x ~/venv/bin/python ]] && python -m venv ~/venv'
+      - run:
+          name: install system dependencies
+          command: |
+            GETH_PATH="~/.local/bin/geth-${OS_NAME}-${GETH_VERSION}"
+            if [ ! -x ${GETH_PATH} ]; then
+              mkdir -p ~/.local/bin
+              TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'gethtmp')
+              pushd ${TEMP}
+              wget -O geth.tar.gz ${GETH_URL_LINUX}
+              tar xzf geth.tar.gz
+              cd geth*/
+              install -m 755 geth ${GETH_PATH}
+            fi
+            ln -sf ${GETH_PATH} ~/.local/bin/geth
+
+            SOLC_PATH="~/.local/bin/solc-${OS_NAME}-${SOLC_VERSION}"
+            if [ ! -x ${SOLC_PATH} ]; then
+              mkdir -p ~/.local/bin
+              curl -L ${SOLC_URL_LINUX} > ${SOLC_PATH}
+              chmod 775 ${SOLC_PATH}
+            else
+            ln -sf ${SOLC_PATH} ~/.local/bin/solc
+      - save_cache:
+          key: system-deps-{{ checksum ".env-GETH_VERSION" }}-{{ checksum ".env-GETH_VERSION" }}
+          paths:
+            - "~/.local"
+      - run:
+          name: install dependencies
+          command: |
+            . ~/venv/bin/activate
+            pip install -U pip wheel
+            pip install readme_renderer pyinstaller
+            pip install -r requirements-dev.txt
+            pip install -e .
+      - save_cache:
+          key: python-deps-{{ .Branch }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}-{{ checksum "venv/bin/python" }}
+          paths:
+            - "~/venv"
+      - save_cache:
+          key: pip-cache-{{ checksum ".env-PYTHON_VERSION" }}-{{ .Branch }}
+          paths:
+            - "~/.cache/pip"
+      - persist_to_workspace:
+          root: "."
+          paths:
+            - .cache/pip
+            - .local
+            - raiden
+            - venv
+  check:
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          to: .
+      - run:
+          name: setup path
+          command: "echo 'export PATH=~/venv/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - run:
+          name: check flake8
+          command: flake8 raiden/ tools/
+      - run:
+          name: check README formatting
+          command: python setup.py check --restructuredtext --strict
+      - run:
+          name: raiden smoketest
+          command: raiden smoketest
+
+  test-unit-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: unit
+    docker:
+      - image: circleci/python:3.5
+
+  test-unit-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: unit
+
+  test-smartcontracts-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: smart_contracts
+    docker:
+      - image: circleci/python:3.5
+
+  test-smartcontracts-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: smart_contracts
+
+  test-property-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: property
+    docker:
+      - image: circleci/python:3.5
+
+  test-property-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: property
+
+  test-integration-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: integration
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-integration-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: integration
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+  test-long-running-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: long_running
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-long-running-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: long_running
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+  test-api-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: api
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-api-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: api
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+
+workflows:
+  version: 2
+  prepare-check-test:
+    jobs:
+      - prepare_workspace
+      - check:
+          requires:
+            - prepare_workspace
+      - test-unit-35:
+          requires:
+            - check
+      - test-unit-36:
+          requires:
+            - check
+      - test-smartcontracts-35:
+          requires:
+            - check
+      - test-smartcontracts-36:
+          requires:
+            - check
+      - test-property-35:
+          requires:
+            - check
+      - test-property-36:
+          requires:
+            - check
+      - test-integration-35:
+          requires:
+            - check
+      - test-integration-36:
+          requires:
+            - check
+      - test-long-running-35:
+          requires:
+            - check
+      - test-long-running-36:
+          requires:
+            - check
+      - test-api-35:
+          requires:
+            - check
+      - test-api-36:
+          requires:
+            - check
