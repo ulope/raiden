@@ -46,7 +46,6 @@ templates:
             pip install readme_renderer pyinstaller
             pip install -r requirements-dev.txt
             pip install -e .
-            pip list --format=columns
       # This is a bit ugly. Since save_cache doesn't appear to support env variables we need to
       # cover both cases (Python 3.5 and 3.6). The non-existing path will be ignored.
       - save_cache:
@@ -85,7 +84,7 @@ templates:
           command: python setup.py check --restructuredtext --strict
       - run:
           name: Running Raiden Smoketest
-          command: pip list --format=columns; raiden smoketest
+          command: raiden smoketest
 
   job-test-template: &job-test-template
     <<: *job-base-template
@@ -293,26 +292,26 @@ workflows:
           requires:
             - check-35
             - check-36
-      - test-smartcontracts-35:
-          requires:
-            - check-35
-            - check-36
-      - test-property-35:
-          requires:
-            - check-35
-            - check-36
       - test-integration-35:
           requires:
             - check-35
             - check-36
+      - test-smartcontracts-35:
+          requires:
+            - test-unit-35
+            - test-integration-35
+      - test-property-35:
+          requires:
+            - test-unit-35
+            - test-integration-35
       - test-long-running-35:
           requires:
-            - check-35
-            - check-36
+            - test-unit-35
+            - test-integration-35
       - test-api-35:
           requires:
-            - check-35
-            - check-36
+            - test-unit-35
+            - test-integration-35
 
       - prepare-python-36:
           requires:
@@ -324,23 +323,23 @@ workflows:
           requires:
             - check-35
             - check-36
-      - test-smartcontracts-36:
-          requires:
-            - check-35
-            - check-36
-      - test-property-36:
-          requires:
-            - check-35
-            - check-36
       - test-integration-36:
           requires:
             - check-35
             - check-36
+      - test-smartcontracts-36:
+          requires:
+            - test-unit-36
+            - test-integration-36
+      - test-property-36:
+          requires:
+            - test-unit-36
+            - test-integration-36
       - test-long-running-36:
           requires:
-            - check-35
-            - check-36
+            - test-unit-36
+            - test-integration-36
       - test-api-36:
           requires:
-            - check-35
-            - check-36
+            - test-unit-36
+            - test-integration-36
