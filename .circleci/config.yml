@@ -271,10 +271,13 @@ workflows:
   version: 2
   prepare-check-test:
     jobs:
-      - prepare-workspace-35
+      - prepare-system
+      - prepare-python-35:
+          requires:
+            - prepare-system
       - check-35:
           requires:
-            - prepare-workspace-35
+            - prepare-python-35
       - test-unit-35:
           requires:
             - check-35
@@ -300,10 +303,12 @@ workflows:
             - check-35
             - check-36
 
-      - prepare-workspace-36
+      - prepare-python-36:
+          requires:
+            - prepare-system
       - check-36:
           requires:
-            - prepare-workspace-36
+            - prepare-python-36
       - test-unit-36:
           requires:
             - check-35
