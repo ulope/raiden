@@ -276,6 +276,11 @@ jobs:
       TEST_TYPE: api
       BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
 
+  finalize:
+    <<: *job-base-template
+    steps:
+      - run:
+          command: echo done
 
 workflows:
   version: 2
@@ -335,3 +340,16 @@ workflows:
       - test-api-36:
           requires:
             - test-integration-36
+
+      - finalize:
+          requires:
+            - test-unit-35
+            - test-unit-36
+            - test-api-35
+            - test-api-36
+            - test-smartcontracts-35
+            - test-smartcontracts-36
+            - test-property-35
+            - test-property-36
+            - test-long-running-35
+            - test-long-running-36
