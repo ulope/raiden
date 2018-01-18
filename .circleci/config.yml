@@ -298,19 +298,15 @@ workflows:
             - check-36
       - test-smartcontracts-35:
           requires:
-            - test-unit-35
             - test-integration-35
       - test-property-35:
           requires:
-            - test-unit-35
             - test-integration-35
       - test-long-running-35:
           requires:
-            - test-unit-35
             - test-integration-35
       - test-api-35:
           requires:
-            - test-unit-35
             - test-integration-35
 
       - prepare-python-36:
@@ -329,17 +325,13 @@ workflows:
             - check-36
       - test-smartcontracts-36:
           requires:
-            - test-unit-36
             - test-integration-36
       - test-property-36:
           requires:
-            - test-unit-36
             - test-integration-36
       - test-long-running-36:
           requires:
-            - test-unit-36
             - test-integration-36
       - test-api-36:
           requires:
-            - test-unit-36
             - test-integration-36
