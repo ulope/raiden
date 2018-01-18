@@ -20,13 +20,16 @@ templates:
             echo ${PYTHON_VERSION} > ~/.env-PYTHON_VERSION
             echo ${PYTHON_VERSION%.*} > ~/.env-PYTHON_VERSION_SHORT
             echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+            echo 'export PATH=~/venv-${PYTHON_VERSION_SHORT}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}
       - restore_cache:
           key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}
       - restore_cache:
           keys:
             - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
-            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
             - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
+      - restore_cache:
+          keys:
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
             - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
       - run:
           name: Creating virtualenv
@@ -38,12 +41,12 @@ templates:
       - run:
           name: Installing dependencies
           command: |
-            echo $PYTHONPATH
             . ${VENV_PATH}/bin/activate
             pip install -U pip wheel
             pip install readme_renderer pyinstaller
             pip install -r requirements-dev.txt
             pip install -e .
+            pip list --format=columns
       # This is a bit ugly. Since save_cache doesn't appear to support env variables we need to
       # cover both cases (Python 3.5 and 3.6). The non-existing path will be ignored.
       - save_cache:
@@ -82,8 +85,7 @@ templates:
           command: python setup.py check --restructuredtext --strict
       - run:
           name: Running Raiden Smoketest
-          command: raiden smoketest
-
+          command: pip list --format=columns; raiden smoketest
 
   job-test-template: &job-test-template
     <<: *job-base-template
@@ -92,7 +94,9 @@ templates:
           at: "~"
       - run:
           name: Configuring PATH
-          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+          command: |
+            echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+            echo 'export PATH=~/venv-${PYTHON_VERSION_SHORT}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}
       - restore_cache:
           key: ethash-{{ checksum "~/.local/bin/geth" }}
       - run:
