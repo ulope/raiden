@@ -1,13 +1,114 @@
 version: 2
 
-# This is used as a template for the actual jobs and not actually being run itself
+# The following are templates for the actual jobs defined below `jobs:`
 templates:
   job-base-template: &job-base-template
     working_directory: ~/raiden
     docker:
       - image: circleci/python:3.6
 
-  job-prepare-template: &job-prepare-template
+  job-prepare-py-template: &job-prepare-py-template
+    <<: *job-base-template
+
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Preparing environment
+          # Workaround to enable using env variables in cache keys
+          command: |
+            echo ${PYTHON_VERSION} > ~/.env-PYTHON_VERSION
+            echo ${PYTHON_VERSION%.*} > ~/.env-PYTHON_VERSION_SHORT
+            echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+      - restore_cache:
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}
+      - restore_cache:
+          keys:
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
+      - run:
+          name: Creating virtualenv
+          command: |
+            if [ ! -x ~/venv-${PYTHON_VERSION_SHORT}/bin/python ]; then
+              python -m venv ~/venv-${PYTHON_VERSION_SHORT}
+            fi
+            echo 'export VENV_PATH="$HOME/venv-${PYTHON_VERSION_SHORT}"' >> ${BASH_ENV}
+      - run:
+          name: Installing dependencies
+          command: |
+            echo $PYTHONPATH
+            . ${VENV_PATH}/bin/activate
+            pip install -U pip wheel
+            pip install readme_renderer pyinstaller
+            pip install -r requirements-dev.txt
+            pip install -e .
+      # This is a bit ugly. Since save_cache doesn't appear to support env variables we need to
+      # cover both cases (Python 3.5 and 3.6). The non-existing path will be ignored.
+      - save_cache:
+          key: python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - "~/venv-3.5"
+      - save_cache:
+          key: python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - "~/venv-3.6"
+      - save_cache:
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}
+          paths:
+            - "~/.cache/pip"
+      - persist_to_workspace:
+          root: "~"
+          paths:
+            - venv-3.5
+            - venv-3.6
+
+  job-check-template: &job-check-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Configuring PATH
+          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - run:
+          name: Checking flake8
+          command: flake8 raiden/ tools/
+      - run:
+          name: Checking README formatting
+          command: python setup.py check --restructuredtext --strict
+      - run:
+          name: Running Raiden Smoketest
+          command: raiden smoketest
+
+
+  job-test-template: &job-test-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Configuring PATH
+          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
+      - restore_cache:
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
+      - run:
+          name: Running tests
+          command: |
+            mkdir -p test-reports/${TEST_TYPE}
+            coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/${TEST_TYPE} $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+      - save_cache:
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
+          paths:
+            - "~/.ethash"
+      - store_test_results:
+          path: test-reports
+      - store_artifacts:
+          path: test-reports
+
+jobs:
+  prepare-system:
     <<: *job-base-template
     environment:
       GETH_URL_LINUX: 'https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-1.7.2-1db4ecdc.tar.gz'
@@ -16,7 +117,6 @@ templates:
       SOLC_URL_LINUX: 'https://github.com/ethereum/solidity/releases/download/v0.4.18/solc-static-linux'
       SOLC_URL_MACOS: 'https://www.dropbox.com/s/21xuco6djjpdwd4/solc_0.4.18?dl=0'
       SOLC_VERSION: 'v0.4.18'
-
     steps:
       - run:
           name: Preparing environment
@@ -66,95 +166,19 @@ templates:
           key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
           paths:
             - "~/.local"
-      - restore_cache:
-          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
-      - restore_cache:
-          keys:
-            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
-            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
-            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-'
-            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-'
-      - run:
-          name: Creating virtualenv
-          command: |
-            if [ ! -x ~/venv-${PYTHON_VERSION%.*}/bin/python ]; then
-              python -m venv ~/venv-${PYTHON_VERSION%.*}
-            fi
-            echo 'export VENV_PATH="$HOME/venv-${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
-      - run:
-          name: Installing dependencies
-          command: |
-            echo $PYTHONPATH
-            . ${VENV_PATH}/bin/activate
-            pip install -U pip wheel
-            pip install readme_renderer pyinstaller
-            pip install -r requirements-dev.txt
-            pip install -e .
-      - save_cache:
-          key: python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
-          paths:
-            - "~/venv-3.5"
-      - save_cache:
-          key: python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
-          paths:
-            - "~/venv-3.6"
-      - save_cache:
-          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION" }}
-          paths:
-            - "~/.cache/pip"
       - persist_to_workspace:
           root: "~"
           paths:
             - .local
             - raiden
-            - venv-3.5
-            - venv-3.6
 
-  job-check-template: &job-check-template
-    <<: *job-base-template
-    steps:
-      - attach_workspace:
-          at: "~"
-      - run:
-          name: setup path
-          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
-      - run:
-          name: check flake8
-          command: flake8 raiden/ tools/
-      - run:
-          name: check README formatting
-          command: python setup.py check --restructuredtext --strict
-      - run:
-          name: raiden smoketest
-          command: raiden smoketest
-
-
-  job-test-template: &job-test-template
-    <<: *job-base-template
-    steps:
-      - attach_workspace:
-          at: "~"
-      - run:
-          name: Configuring PATH
-          command: "echo 'export PATH=~/venv-${PYTHON_VERSION%.*}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}"
-      - restore_cache:
-          key: ethash-{{ checksum "~/.local/bin/geth" }}
-      - run:
-          name: Running tests
-          command: coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
-      - save_cache:
-          key: ethash-{{ checksum "~/.local/bin/geth" }}
-          paths:
-            - "~/.ethash"
-
-jobs:
-  prepare-workspace-35:
-    <<: *job-prepare-template
+  prepare-python-35:
+    <<: *job-prepare-py-template
     docker:
       - image: circleci/python:3.5
 
-  prepare-workspace-36:
-    <<: *job-prepare-template
+  prepare-python-36:
+    <<: *job-prepare-py-template
 
   check-35:
     <<: *job-check-template
