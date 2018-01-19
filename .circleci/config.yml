@@ -120,7 +120,7 @@ templates:
           name: Running tests
           command: |
             mkdir -p test-reports/${TEST_TYPE}
-            circleci tests glob raiden/tests/**/test_*.py | circleci tests split --split-by timings | xargs coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/${TEST_TYPE}-${PYTHON_VERSION_SHORT} --blockchain-type=geth --blockchain-cache
+            circleci tests glob raiden/tests/**/test_*.py | circleci tests split --split-by timings | xargs coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/tests-${PYTHON_VERSION_SHORT}.xml --blockchain-type=geth --blockchain-cache
       - save_cache:
           key: ethash-{{ checksum "~/.local/bin/geth" }}
           paths:
