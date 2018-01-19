@@ -2,7 +2,7 @@ version: 2
 
 # The following are templates for the actual jobs defined below `jobs:`
 templates:
-  job-base-template: &job-base-template
+  job-template: &job-template
     working_directory: ~/raiden
 
     environment: &environment
@@ -120,7 +120,8 @@ templates:
           name: Running tests
           command: |
             mkdir -p test-reports/${TEST_TYPE}
-            coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/${TEST_TYPE}-${PYTHON_VERSION_SHORT} $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+            circleci tests glob raiden/tests/**/test_*.py | circleci tests split --split-by timings | xargs wc
+            #coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/${TEST_TYPE}-${PYTHON_VERSION_SHORT} $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
       - save_cache:
           key: ethash-{{ checksum "~/.local/bin/geth" }}
           paths:
@@ -130,98 +131,28 @@ templates:
       - store_artifacts:
           path: test-reports
 
-  job-template-35: &job-template-35
-    <<: *job-base-template
-    docker:
-      - image: circleci/python:3.5
-
-  job-template-36: &job-template-36
-    <<: *job-base-template
-    docker:
-      - image: circleci/python:3.6
-
 jobs:
   build:
     docker:
       - image: circleci/python:3.6
     steps:
       - run:
-          command: echo 1
+          command: |
+            for job in 35 36; do
+              curl --user ${CIRCLE_API_TOKEN}: \
+                  --data build_parameters[CIRCLE_JOB]=test-$job \
+                  --data revision=${CIRCLE_SHA1} \
+                  https://circleci.com/api/v1.1/project/github/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/tree/${CIRCLE_BRANCH}
+            done
 
-  test-unit-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: unit
+  test-35:
+    parallelism: 4
+    docker:
+      - image: circleci/python:3.5
+    <<: *job-template
 
-  test-unit-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: unit
-
-  test-smartcontracts-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: smart_contracts
-
-  test-smartcontracts-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: smart_contracts
-
-  test-property-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: property
-
-  test-property-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: property
-
-  test-integration-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: integration
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
-
-  test-integration-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: integration
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
-
-  test-long-running-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: long_running
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
-
-  test-long-running-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: long_running
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
-
-  test-api-35:
-    <<: *job-template-35
-    environment:
-      <<: *environment
-      TEST_TYPE: api
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
-
-  test-api-36:
-    <<: *job-template-36
-    environment:
-      <<: *environment
-      TEST_TYPE: api
-      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+  test-36:
+    parallelism: 4
+    docker:
+      - image: circleci/python:3.6
+    <<: *job-template
