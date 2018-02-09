@@ -1,0 +1,355 @@
+version: 2
+
+# The following are templates for the actual jobs defined below `jobs:`
+templates:
+  job-base-template: &job-base-template
+    working_directory: ~/raiden
+    docker:
+      - image: circleci/python:3.6
+
+  job-prepare-py-template: &job-prepare-py-template
+    <<: *job-base-template
+
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Preparing environment
+          # Workaround to enable using env variables in cache keys
+          command: |
+            echo ${PYTHON_VERSION} > ~/.env-PYTHON_VERSION
+            echo ${PYTHON_VERSION%.*} > ~/.env-PYTHON_VERSION_SHORT
+            echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+            echo 'export PATH=~/venv-${PYTHON_VERSION_SHORT}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}
+      - restore_cache:
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}
+      - restore_cache:
+          keys:
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
+      - restore_cache:
+          keys:
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}'
+            - 'python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-'
+      - run:
+          name: Creating virtualenv
+          command: |
+            if [ ! -x ~/venv-${PYTHON_VERSION_SHORT}/bin/python ]; then
+              python -m venv ~/venv-${PYTHON_VERSION_SHORT}
+            fi
+            echo 'export VENV_PATH="$HOME/venv-${PYTHON_VERSION_SHORT}"' >> ${BASH_ENV}
+      - run:
+          name: Installing dependencies
+          command: |
+            . ${VENV_PATH}/bin/activate
+            pip install -U pip wheel
+            pip install readme_renderer pyinstaller
+            pip install -r requirements-dev.txt
+            pip install -e .
+      # This is a bit ugly. Since save_cache doesn't appear to support env variables we need to
+      # cover both cases (Python 3.5 and 3.6). The non-existing path will be ignored.
+      - save_cache:
+          key: python-deps-3.5-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - "~/venv-3.5"
+      - save_cache:
+          key: python-deps-3.6-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}-{{ checksum "requirements.txt" }}-{{ checksum "requirements-dev.txt" }}
+          paths:
+            - "~/venv-3.6"
+      - save_cache:
+          key: pip-cache-{{ checksum "~/.env-PYTHON_VERSION_SHORT" }}
+          paths:
+            - "~/.cache/pip"
+      - persist_to_workspace:
+          root: "~"
+          paths:
+            - venv-3.5
+            - venv-3.6
+
+  job-check-template: &job-check-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Configuring PATH
+          command: |
+            echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+            echo 'export PATH=~/venv-${PYTHON_VERSION_SHORT}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}
+      - run:
+          name: Checking flake8
+          command: flake8 raiden/ tools/
+      - run:
+          name: Checking README formatting
+          command: python setup.py check --restructuredtext --strict
+      - run:
+          name: Running Raiden Smoketest
+          command: raiden smoketest
+
+  job-test-template: &job-test-template
+    <<: *job-base-template
+    steps:
+      - attach_workspace:
+          at: "~"
+      - run:
+          name: Configuring PATH
+          command: |
+            echo 'export PYTHON_VERSION_SHORT="${PYTHON_VERSION%.*}"' >> ${BASH_ENV}
+            echo 'export PATH=~/venv-${PYTHON_VERSION_SHORT}/bin:~/.local/bin:${PATH}' >> ${BASH_ENV}
+      - restore_cache:
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
+      - run:
+          name: Running tests
+          command: |
+            mkdir -p test-reports/${TEST_TYPE}
+            coverage run -m py.test -vvvvvv --log-config='raiden:DEBUG' --random --junit-xml=test-reports/${TEST_TYPE}-${PYTHON_VERSION_SHORT} $BLOCKCHAIN_TYPE ./raiden/tests/${TEST_TYPE}
+      - save_cache:
+          key: ethash-{{ checksum "~/.local/bin/geth" }}
+          paths:
+            - "~/.ethash"
+      - store_test_results:
+          path: test-reports
+      - store_artifacts:
+          path: test-reports
+
+jobs:
+  prepare-system:
+    <<: *job-base-template
+    environment:
+      GETH_URL_LINUX: 'https://gethstore.blob.core.windows.net/builds/geth-linux-amd64-1.7.2-1db4ecdc.tar.gz'
+      GETH_URL_MACOS: 'https://gethstore.blob.core.windows.net/builds/geth-darwin-amd64-1.7.2-1db4ecdc.tar.gz'
+      GETH_VERSION: '1.7.2'
+      SOLC_URL_LINUX: 'https://github.com/ethereum/solidity/releases/download/v0.4.18/solc-static-linux'
+      SOLC_URL_MACOS: 'https://www.dropbox.com/s/21xuco6djjpdwd4/solc_0.4.18?dl=0'
+      SOLC_VERSION: 'v0.4.18'
+    steps:
+      - run:
+          name: Preparing environment
+          # Workaround to enable using env variables in cache keys
+          command: |
+            echo ${GETH_VERSION} > ~/.env-GETH_VERSION
+            echo ${SOLC_VERSION} > ~/.env-SOLC_VERSION
+            echo ${PYTHON_VERSION} > ~/.env-PYTHON_VERSION
+            echo "export OS_NAME=$(uname -s)" >> ${BASH_ENV}
+      - restore_cache:
+          keys:
+            - source-{{ .Branch }}-{{ .Revision }}
+            - source-{{ .Branch }}-
+            - source-
+
+      - checkout
+
+      - save_cache:
+          key: source-{{ .Branch }}-{{ .Revision }}
+          paths:
+            - ".git"
+      # This needs to be done here in order for the .egg-info directory to be included in the
+      # workspace. Luckily we don't need a virtualenv for this step.
+      - run:
+          name: Generate .egg-info
+          command: python setup.py egg_info
+      - restore_cache:
+          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
+      - run:
+          name: Installing system dependencies
+          command: |
+            GETH_PATH="${HOME}/.local/bin/geth-${OS_NAME}-${GETH_VERSION}"
+            if [ ! -x ${GETH_PATH} ]; then
+              mkdir -p ${HOME}/.local/bin
+              TEMP=$(mktemp -d 2>/dev/null || mktemp -d -t 'gethtmp')
+              pushd ${TEMP}
+              wget -O geth.tar.gz ${GETH_URL_LINUX}
+              tar xzf geth.tar.gz
+              cd geth*/
+              install -m 755 geth ${GETH_PATH}
+            fi
+            ln -sf ${GETH_PATH} ${HOME}/.local/bin/geth
+
+            SOLC_PATH="${HOME}/.local/bin/solc-${OS_NAME}-${SOLC_VERSION}"
+            if [ ! -x ${SOLC_PATH} ]; then
+              mkdir -p ${HOME}/.local/bin
+              curl -L ${SOLC_URL_LINUX} > ${SOLC_PATH}
+              chmod 775 ${SOLC_PATH}
+            fi
+            ln -sf ${SOLC_PATH} ${HOME}/.local/bin/solc
+      - save_cache:
+          key: system-deps-{{ checksum "~/.env-GETH_VERSION" }}-{{ checksum "~/.env-GETH_VERSION" }}
+          paths:
+            - "~/.local"
+      - persist_to_workspace:
+          root: "~"
+          paths:
+            - .local
+            - raiden
+
+  prepare-python-35:
+    <<: *job-prepare-py-template
+    docker:
+      - image: circleci/python:3.5
+
+  prepare-python-36:
+    <<: *job-prepare-py-template
+
+  check-35:
+    <<: *job-check-template
+    docker:
+      - image: circleci/python:3.5
+
+  check-36:
+    <<: *job-check-template
+
+  test-unit-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: unit
+    docker:
+      - image: circleci/python:3.5
+
+  test-unit-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: unit
+
+  test-smartcontracts-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: smart_contracts
+    docker:
+      - image: circleci/python:3.5
+
+  test-smartcontracts-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: smart_contracts
+
+  test-property-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: property
+    docker:
+      - image: circleci/python:3.5
+
+  test-property-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: property
+
+  test-integration-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: integration
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-integration-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: integration
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+  test-long-running-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: long_running
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-long-running-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: long_running
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+  test-api-35:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: api
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+    docker:
+      - image: circleci/python:3.5
+
+  test-api-36:
+    <<: *job-test-template
+    environment:
+      TEST_TYPE: api
+      BLOCKCHAIN_TYPE: '--blockchain-type=geth --blockchain-cache'
+
+  finalize:
+    <<: *job-base-template
+    steps:
+      - run:
+          command: echo done
+
+workflows:
+  version: 2
+  prepare-check-test:
+    jobs:
+      - prepare-system
+      - prepare-python-35:
+          requires:
+            - prepare-system
+      - check-35:
+          requires:
+            - prepare-python-35
+      - test-unit-35:
+          requires:
+            - check-35
+            - check-36
+      - test-integration-35:
+          requires:
+            - check-35
+            - check-36
+      - test-smartcontracts-35:
+          requires:
+            - test-integration-35
+      - test-property-35:
+          requires:
+            - test-integration-35
+      - test-long-running-35:
+          requires:
+            - test-integration-35
+      - test-api-35:
+          requires:
+            - test-integration-35
+
+      - prepare-python-36:
+          requires:
+            - prepare-system
+      - check-36:
+          requires:
+            - prepare-python-36
+      - test-unit-36:
+          requires:
+            - check-35
+            - check-36
+      - test-integration-36:
+          requires:
+            - check-35
+            - check-36
+      - test-smartcontracts-36:
+          requires:
+            - test-integration-36
+      - test-property-36:
+          requires:
+            - test-integration-36
+      - test-long-running-36:
+          requires:
+            - test-integration-36
+      - test-api-36:
+          requires:
+            - test-integration-36
+
+      - finalize:
+          requires:
+            - test-unit-35
+            - test-unit-36
+            - test-api-35
+            - test-api-36
+            - test-smartcontracts-35
+            - test-smartcontracts-36
+            - test-property-35
+            - test-property-36
+            - test-long-running-35
+            - test-long-running-36
