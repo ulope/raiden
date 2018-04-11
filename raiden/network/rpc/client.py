@@ -146,6 +146,32 @@ def format_data_for_rpccall(
     }
 
 
+def check_node_connection(func):
+    """ A decorator to reconnect if the connection to the node is lost.
+    Decorator should only wrap methods of the JSONRPCClient class"""
+    def retry_on_disconnect(self, *args, **kwargs):
+        for i, timeout in enumerate(timeout_two_stage(10, 3, 10)):
+
+            if self.stop_event and self.stop_event.is_set():
+                raise RaidenShuttingDown()
+
+            try:
+                result = func(self, *args, **kwargs)
+                if i > 0:
+                    self.on_reconnect()
+                    log.info('Client reconnected')
+                return result
+
+            except (requests.exceptions.ConnectionError, InvalidReplyError):
+                log.info(
+                    'Timeout in eth client connection to {}. Is the client offline? Trying '
+                    'again in {}s.'.format(self.transport.endpoint, timeout)
+                )
+            gevent.sleep(timeout)
+
+    return retry_on_disconnect
+
+
 class JSONRPCClient:
     """ Ethereum JSON RPC client.
 
@@ -195,6 +221,8 @@ class JSONRPCClient:
         self.nonce_update_interval = nonce_update_interval
         self.nonce_offset = nonce_offset
         self.given_gas_price = gasprice
+
+        self.reconnect_listeners = []
 
         cache = cachetools.TTLCache(
             maxsize=1,
@@ -788,3 +816,13 @@ class JSONRPCClient:
         finally:
             if deadline:
                 deadline.cancel()
+
+    def on_reconnect(self):
+        """
+        This gets called from :py:func:`check_node_connection()` in case there was a reconnect.
+        """
+        for reconnect_listener in self.reconnect_listeners:
+            reconnect_listener()
+
+    def add_reconnect_listener(self, listener):
+        self.reconnect_listeners.append(listener)
