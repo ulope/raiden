@@ -10,8 +10,15 @@ from raiden.constants import (
 )
 from raiden.encoding.format import buffer_for
 from raiden.encoding import messages, signing
-from raiden.encoding.signing import recover_publickey_safe
-from raiden.utils import publickey_to_address, sha3, ishash, pex
+from raiden.utils import (
+    sha3,
+    ishash,
+    pex,
+    address_encoder,
+    address_decoder,
+    data_encoder,
+    data_decoder,
+)
 from raiden.transfer.state import EMPTY_MERKLE_ROOT
 from raiden.exceptions import InvalidProtocolMessage
 from raiden.transfer.balance_proof import pack_signing_data
@@ -69,8 +76,20 @@ def decode(data):
     try:
         klass = CMDID_TO_CLASS[data[0]]
     except KeyError:
-        raise InvalidProtocolMessage('Invalid message type (data[0] = {})'.format(hex(data[0])))
+        raise InvalidProtocolMessage(
+            'Invalid message type (data[0] = {})'.format(hex(data[0]))
+        )
     return klass.decode(data)
+
+
+def from_dict(data):
+    try:
+        klass = CLASSNAME_TO_CLASS[data['type']]
+    except KeyError:
+        raise InvalidProtocolMessage(
+            'Invalid message type (data["type"] = {})'.format(data['type'])
+        )
+    return klass.from_dict(data)
 
 
 class Message:
@@ -91,11 +110,9 @@ class Message:
         return not self.__eq__(other)
 
     def __repr__(self):
-        packed = self.packed()
-
         return '<{klass} [msghash={msghash}]>'.format(
             klass=self.__class__.__name__,
-            msghash=pex(sha3(packed.data)),
+            msghash=pex(self.hash),
         )
 
     @classmethod
@@ -157,10 +174,8 @@ class SignedMessage(Message):
         data_that_was_signed = data[:-signature.size_bytes]
         message_signature = data[-signature.size_bytes:]
 
-        publickey = recover_publickey_safe(data_that_was_signed, message_signature)
-
         message = cls.unpack(packed)  # pylint: disable=no-member
-        message.sender = publickey_to_address(publickey)
+        message.sender = signing.recover(data_that_was_signed, message_signature)
         return message
 
 
@@ -232,10 +247,8 @@ class EnvelopeMessage(SignedMessage):
             message_hash,
         )
 
-        publickey = recover_publickey_safe(data_that_was_signed, message_signature)
-
         message = cls.unpack(packed)  # pylint: disable=no-member
-        message.sender = publickey_to_address(publickey)
+        message.sender = signing.recover(data_that_was_signed, message_signature)
         return message
 
 
@@ -253,9 +266,9 @@ class Processed(Message):
         self.sender = sender
         self.processed_message_identifier = processed_message_identifier
 
-    @staticmethod
-    def unpack(packed):
-        return Processed(
+    @classmethod
+    def unpack(cls, packed):
+        return cls(
             packed.sender,
             packed.processed_message_identifier,
         )
@@ -270,6 +283,21 @@ class Processed(Message):
             self.processed_message_identifier,
         )
 
+    def to_dict(self):
+        return {
+            'type': self.__class__.__name__,
+            'sender': address_encoder(self.sender),
+            'echo': data_encoder(self.echo),
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        return cls(
+            address_decoder(data['sender']),
+            data_decoder(data['echo']),
+        )
+
 
 class Ping(SignedMessage):
     """ Ping, should be responded by a `Processed` message. """
@@ -279,15 +307,29 @@ class Ping(SignedMessage):
         super().__init__()
         self.nonce = nonce
 
-    @staticmethod
-    def unpack(packed):
-        ping = Ping(packed.nonce)
+    @classmethod
+    def unpack(cls, packed):
+        ping = cls(packed.nonce)
         ping.signature = packed.signature
         return ping
 
     def pack(self, packed):
         packed.nonce = self.nonce
         packed.signature = self.signature
+
+    def to_dict(self):
+        return {
+            'type': self.__class__.__name__,
+            'nonce': self.nonce,
+            'signature': data_encoder(self.signature),
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        ping = cls(data['nonce'])
+        ping.signature = data_decoder(data['signature'])
+        return ping
 
 
 class SecretRequest(SignedMessage):
@@ -311,13 +353,13 @@ class SecretRequest(SignedMessage):
             pex(self.hash),
         )
 
-    @staticmethod
-    def unpack(packed):
-        secret_request = SecretRequest(
-            packed.message_identifier,
-            packed.payment_identifier,
-            packed.secrethash,
-            packed.amount,
+    @classmethod
+    def unpack(cls, packed):
+        secret_request = cls(
+            message_identifier=packed.message_identifier,
+            payment_identifier=packed.payment_identifier,
+            secrethash=packed.secrethash,
+            amount=packed.amount
         )
         secret_request.signature = packed.signature
         return secret_request
@@ -329,9 +371,9 @@ class SecretRequest(SignedMessage):
         packed.amount = self.amount
         packed.signature = self.signature
 
-    @staticmethod
-    def from_event(event):
-        return SecretRequest(
+    @classmethod
+    def from_event(cls, event):
+        return cls(
             event.message_identifier,
             event.payment_identifier,
             event.secrethash,
@@ -343,17 +385,22 @@ class SecretRequest(SignedMessage):
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
             'secrethash': self.secrethash.hex(),
+            'type': self.__class__.__name__,
             'amount': self.amount,
+            'signature': data_encoder(self.signature),
         }
 
-    @staticmethod
-    def from_dict(data):
-        return SecretRequest(
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        message = cls(
             data['message_identifier'],
             data['payment_identifier'],
             unhexlify(data['secrethash']),
             data['amount'],
         )
+        message.signature = data_decoder(data['signature'])
+        return message
 
 
 class Secret(EnvelopeMessage):
@@ -424,9 +471,9 @@ class Secret(EnvelopeMessage):
             self._secrethash = sha3(self.secret)
         return self._secrethash
 
-    @staticmethod
-    def unpack(packed):
-        secret = Secret(
+    @classmethod
+    def unpack(cls, packed):
+        secret = cls(
             packed.message_identifier,
             packed.payment_identifier,
             packed.nonce,
@@ -448,9 +495,9 @@ class Secret(EnvelopeMessage):
         packed.secret = self.secret
         packed.signature = self.signature
 
-    @staticmethod
-    def from_event(event):
-        return Secret(
+    @classmethod
+    def from_event(cls, event):
+        return cls(
             event.message_identifier,
             event.payment_identifier,
             event.balance_proof.nonce,
@@ -462,28 +509,30 @@ class Secret(EnvelopeMessage):
 
     def to_dict(self):
         return {
+            'type': self.__class__.__name__,
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
             'secret': self.secret.hex(),
             'nonce': self.nonce,
-            'channel': self.channel.hex(),
+            'channel': address_encoder(self.channel),
             'transferred_amount': self.transferred_amount,
-            'locksroot': self.locksroot.hex(),
-            'signature': self.signature.hex(),
+            'locksroot': data_encoder(self.locksroot),
+            'signature': data_encoder(self.signature),
         }
 
-    @staticmethod
-    def from_dict(data):
-        message = Secret(
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        message = cls(
             data['message_identifier'],
             data['payment_identifier'],
-            unhexlify(data['secret']),
+            data_decoder(data['secret']),
             data['nonce'],
-            unhexlify(data['channel']),
+            address_decoder(data['channel']),
             data['transferred_amount'],
-            unhexlify(data['locksroot']),
+            data_decoder(data['locksroot']),
         )
-        message.signature = unhexlify(data['signature'])
+        message.signature = data_decoder(data['signature'])
         return message
 
 
@@ -517,12 +566,9 @@ class RevealSecret(SignedMessage):
             self._secrethash = sha3(self.secret)
         return self._secrethash
 
-    @staticmethod
-    def unpack(packed):
-        reveal_secret = RevealSecret(
-            packed.message_identifier,
-            packed.secret,
-        )
+    @classmethod
+    def unpack(cls, packed):
+        reveal_secret = cls(packed.message_identifier, packed.secret)
         reveal_secret.signature = packed.signature
         return reveal_secret
 
@@ -531,9 +577,9 @@ class RevealSecret(SignedMessage):
         packed.secret = self.secret
         packed.signature = self.signature
 
-    @staticmethod
-    def from_event(event):
-        return RevealSecret(
+    @classmethod
+    def from_event(cls, event):
+        return cls(
             event.message_identifier,
             event.secret,
         )
@@ -541,15 +587,20 @@ class RevealSecret(SignedMessage):
     def to_dict(self):
         return {
             'message_identifier': self.message_identifier,
-            'secret': self.secret.hex(),
+            'type': self.__class__.__name__,
+            'secret': data_encoder(self.secret),
+            'signature': data_encoder(self.signature),
         }
 
-    @staticmethod
-    def from_dict(data):
-        return RevealSecret(
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        message = cls(
             data['message_identifier'],
-            unhexlify(data['secret']),
+            data_decoder(data['secret'])
         )
+        message.signature = data_decoder(data['signature'])
+        return message
 
 
 class DirectTransfer(EnvelopeMessage):
@@ -608,9 +659,9 @@ class DirectTransfer(EnvelopeMessage):
         self.recipient = recipient  #: partner's address
         self.locksroot = locksroot  #: the merkle root that represent all pending locked transfers
 
-    @staticmethod
-    def unpack(packed):
-        transfer = DirectTransfer(
+    @classmethod
+    def unpack(cls, packed):
+        transfer = cls(
             packed.message_identifier,
             packed.payment_identifier,
             packed.nonce,
@@ -635,11 +686,11 @@ class DirectTransfer(EnvelopeMessage):
         packed.locksroot = self.locksroot
         packed.signature = self.signature
 
-    @staticmethod
-    def from_event(event):
+    @classmethod
+    def from_event(cls, event):
         balance_proof = event.balance_proof
 
-        return DirectTransfer(
+        return cls(
             event.message_identifier,
             event.payment_identifier,
             balance_proof.nonce,
@@ -670,30 +721,32 @@ class DirectTransfer(EnvelopeMessage):
 
     def to_dict(self):
         return {
+            'type': self.__class__.__name__,
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
             'nonce': self.nonce,
-            'token': self.token.hex(),
-            'channel': self.channel.hex(),
+            'token': address_encoder(self.token),
+            'channel': address_encoder(self.channel),
             'transferred_amount': self.transferred_amount,
-            'recipient': self.recipient.hex(),
-            'locksroot': self.locksroot.hex(),
-            'signature': self.signature.hex(),
+            'recipient': address_encoder(self.recipient),
+            'locksroot': data_encoder(self.locksroot),
+            'signature': data_encoder(self.signature),
         }
 
-    @staticmethod
-    def from_dict(data):
-        message = DirectTransfer(
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        message = cls(
             data['message_identifier'],
             data['payment_identifier'],
             data['nonce'],
-            unhexlify(data['token']),
-            unhexlify(data['channel']),
+            address_decoder(data['token']),
+            address_decoder(data['channel']),
             data['transferred_amount'],
-            unhexlify(data['recipient']),
-            unhexlify(data['locksroot']),
+            address_decoder(data['recipient']),
+            data_decoder(data['locksroot']),
         )
-        message.signature = unhexlify(data['signature'])
+        message.signature = data_decoder(data['signature'])
         return message
 
 
@@ -757,9 +810,9 @@ class Lock:
             packed.secrethash,
         )
 
-    @staticmethod
-    def from_state(state):
-        lock = Lock(
+    @classmethod
+    def from_state(cls, state):
+        lock = cls(
             state.amount,
             state.expiration,
             state.secrethash,
@@ -777,14 +830,20 @@ class Lock:
 
     def to_dict(self):
         return {
+            'type': self.__class__.__name__,
             'amount': self.amount,
             'expiration': self.expiration,
             'secrethash': self.secrethash.hex(),
         }
 
-    @staticmethod
-    def from_dict(data):
-        return Lock(data['amount'], data['expiration'], unhexlify(data['secrethash']))
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        return cls(
+            data['amount'],
+            data['expiration'],
+            data_decoder(data['secrethash'])
+        )
 
 
 class LockedTransferBase(EnvelopeMessage):
@@ -835,15 +894,15 @@ class LockedTransferBase(EnvelopeMessage):
         self.locksroot = locksroot
         self.lock = lock
 
-    @staticmethod
-    def unpack(packed):
+    @classmethod
+    def unpack(cls, packed):
         lock = Lock(
             packed.amount,
             packed.expiration,
             packed.secrethash,
         )
 
-        locked_transfer = LockedTransferBase(
+        locked_transfer = cls(
             packed.message_identifier,
             packed.payment_identifier,
             packed.nonce,
@@ -957,15 +1016,15 @@ class LockedTransfer(LockedTransferBase):
 
         return representation
 
-    @staticmethod
-    def unpack(packed):
+    @classmethod
+    def unpack(cls, packed):
         lock = Lock(
             packed.amount,
             packed.expiration,
             packed.secrethash,
         )
 
-        mediated_transfer = LockedTransfer(
+        mediated_transfer = cls(
             packed.message_identifier,
             packed.payment_identifier,
             packed.nonce,
@@ -1002,8 +1061,8 @@ class LockedTransfer(LockedTransferBase):
 
         packed.signature = self.signature
 
-    @staticmethod
-    def from_event(event: 'SendLockedTransfer') -> 'LockedTransfer':
+    @classmethod
+    def from_event(cls, event: 'SendLockedTransfer') -> 'LockedTransfer':
         transfer = event.transfer
         lock = transfer.lock
         balance_proof = transfer.balance_proof
@@ -1014,7 +1073,7 @@ class LockedTransfer(LockedTransferBase):
         )
         fee = 0
 
-        return LockedTransfer(
+        return cls(
             event.message_identifier,
             transfer.payment_identifier,
             balance_proof.nonce,
@@ -1031,38 +1090,40 @@ class LockedTransfer(LockedTransferBase):
 
     def to_dict(self):
         return {
+            'type': self.__class__.__name__,
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
             'nonce': self.nonce,
-            'token': self.token.hex(),
-            'channel': self.channel.hex(),
+            'token': address_encoder(self.token),
+            'channel': address_encoder(self.channel),
             'transferred_amount': self.transferred_amount,
-            'recipient': self.recipient.hex(),
-            'locksroot': self.locksroot.hex(),
+            'recipient': address_encoder(self.recipient),
+            'locksroot': data_encoder(self.locksroot),
             'lock': self.lock.to_dict(),
-            'target': self.target.hex(),
-            'initiator': self.initiator.hex(),
+            'target': address_encoder(self.target),
+            'initiator': address_encoder(self.initiator),
             'fee': self.fee,
-            'signature': self.signature.hex(),
+            'signature': data_encoder(self.signature),
         }
 
-    @staticmethod
-    def from_dict(data):
-        message = LockedTransfer(
+    @classmethod
+    def from_dict(cls, data):
+        assert data['type'] == cls.__name__
+        message = cls(
             data['message_identifier'],
             data['payment_identifier'],
             data['nonce'],
-            unhexlify(data['token']),
-            unhexlify(data['channel']),
+            address_decoder(data['token']),
+            address_decoder(data['channel']),
             data['transferred_amount'],
-            unhexlify(data['recipient']),
-            unhexlify(data['locksroot']),
+            address_decoder(data['recipient']),
+            data_decoder(data['locksroot']),
             Lock.from_dict(data['lock']),
-            unhexlify(data['target']),
-            unhexlify(data['initiator']),
+            address_decoder(data['target']),
+            address_decoder(data['initiator']),
             data['fee'],
         )
-        message.signature = unhexlify(data['signature'])
+        message.signature = data_decoder(data['signature'])
         return message
 
 
@@ -1073,15 +1134,15 @@ class RefundTransfer(LockedTransfer):
     """
     cmdid = messages.REFUNDTRANSFER
 
-    @staticmethod
-    def unpack(packed):
+    @classmethod
+    def unpack(cls, packed):
         lock = Lock(
             packed.amount,
             packed.expiration,
             packed.secrethash,
         )
 
-        locked_transfer = RefundTransfer(
+        locked_transfer = cls(
             packed.message_identifier,
             packed.payment_identifier,
             packed.nonce,
@@ -1098,8 +1159,8 @@ class RefundTransfer(LockedTransfer):
         locked_transfer.signature = packed.signature
         return locked_transfer
 
-    @staticmethod
-    def from_event(event):
+    @classmethod
+    def from_event(cls, event):
         balance_proof = event.balance_proof
         lock = Lock(
             event.lock.amount,
@@ -1108,7 +1169,7 @@ class RefundTransfer(LockedTransfer):
         )
         fee = 0
 
-        return RefundTransfer(
+        return cls(
             event.payment_identifier,
             event.message_identifier,
             balance_proof.nonce,
@@ -1123,9 +1184,9 @@ class RefundTransfer(LockedTransfer):
             fee,
         )
 
-    @staticmethod
-    def from_dict(data):
-        message = RefundTransfer(
+    @classmethod
+    def from_dict(cls, data):
+        message = cls(
             data['message_identifier'],
             data['payment_identifier'],
             data['nonce'],
@@ -1142,6 +1203,16 @@ class RefundTransfer(LockedTransfer):
         message.signature = unhexlify(data['signature'])
         return message
 
+MESSAGES = (
+    Processed,
+    Ping,
+    SecretRequest,
+    Secret,
+    RevealSecret,
+    DirectTransfer,
+    LockedTransfer,
+    RefundTransfer,
+)
 
 CMDID_TO_CLASS = {
     messages.PROCESSED: Processed,
@@ -1153,3 +1224,4 @@ CMDID_TO_CLASS = {
     messages.LOCKEDTRANSFER: LockedTransfer,
     messages.REFUNDTRANSFER: RefundTransfer,
 }
+CLASSNAME_TO_CLASS = {klass.__name__: klass for klass in MESSAGES}
