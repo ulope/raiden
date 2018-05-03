@@ -5,7 +5,7 @@ from collections import namedtuple
 from enum import Enum
 from operator import itemgetter
 from random import Random
-from typing import Dict, Set
+from typing import Dict
 from urllib.parse import urlparse
 
 import gevent
@@ -14,7 +14,6 @@ from gevent.event import AsyncResult
 from matrix_client.errors import MatrixRequestError
 from matrix_client.user import User
 
-import raiden
 from raiden.constants import ID_TO_NETWORKNAME
 from raiden.encoding import signing
 from raiden.exceptions import (
@@ -68,7 +67,8 @@ class RaidenMatrixProtocol:
     def __init__(self, raiden_service: 'raiden.raiden_service.RaidenService'):
         self.raiden_service: 'raiden.raiden_service.RaidenService' = raiden_service
         self._server_name: str = self._select_server()
-        self.client: GMatrixClient = GMatrixClient(self._server_name)
+        client_class = self.raiden_service.config['matrix'].get('client_class', GMatrixClient)
+        self.client: GMatrixClient = client_class(self._server_name)
 
         self.discovery_room: Room = None
 

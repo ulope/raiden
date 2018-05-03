@@ -13,7 +13,6 @@ from raiden.settings import (
     DEFAULT_PROTOCOL_THROTTLE_CAPACITY,
     DEFAULT_PROTOCOL_THROTTLE_FILL_RATE,
 )
-from raiden.network.transport import UDPTransport
 from raiden.transfer.mediated_transfer.mediator import TRANSIT_BLOCKS
 from raiden.utils import sha3
 
@@ -298,3 +297,9 @@ def database_paths(tmpdir, private_keys, in_memory_database):
         database_paths.append(os.path.join(app_dir, 'log.db'))
 
     return database_paths
+
+
+@pytest.fixture
+def use_matrix():
+    """Parametrize this to switch transport layer (udp/matrix)"""
+    return False
