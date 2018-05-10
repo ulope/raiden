@@ -1,9 +1,12 @@
+from ipaddress import IPv4Address, AddressValueError
 from itertools import groupby
 from typing import Callable, List
 
 import click
 from click._compat import term_len
 from click.formatting import iter_rows, measure_table, wrap_text
+
+from raiden.utils import address_decoder
 
 
 class HelpFormatter(click.HelpFormatter):
@@ -161,3 +164,42 @@ def option_group(name: str, *options: List[Callable]):
         return f
 
     return decorator
+
+
+class AddressType(click.ParamType):
+    name = 'address'
+
+    def convert(self, value, param, ctx):
+        try:
+            return address_decoder(value)
+        except TypeError:
+            self.fail('Please specify a valid hex-encoded address.')
+
+
+class NATChoiceType(click.Choice):
+    def convert(self, value, param, ctx):
+        if value.startswith('ext:'):
+            ip, _, port = value[4:].partition(':')
+            try:
+                IPv4Address(ip)
+            except AddressValueError:
+                self.fail('invalid IP address: {}'.format(ip), param, ctx)
+            if port:
+                try:
+                    port = int(port, 0)
+                except ValueError:
+                    self.fail('invalid port number: {}'.format(port), param, ctx)
+            else:
+                port = None
+            return ip, port
+        return super().convert(value, param, ctx)
+
+
+class MatrixServerType(click.Choice):
+    def convert(self, value, param, ctx):
+        if value.startswith('http'):
+            return value
+        return super().convert(value, param, ctx)
+
+
+ADDRESS_TYPE = AddressType()

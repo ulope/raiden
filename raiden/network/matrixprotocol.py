@@ -3,16 +3,18 @@ import json
 import logging
 from collections import namedtuple
 from enum import Enum
+from operator import itemgetter
 from random import Random
-from typing import Dict
+from typing import Dict, Set
+from urllib.parse import urlparse
 
+import gevent
 from ethereum import slogging
 from gevent.event import AsyncResult
 from matrix_client.errors import MatrixRequestError
-from matrix_client.room import Room
 from matrix_client.user import User
 
-from raiden import raiden_service  # flake8: noqa
+import raiden
 from raiden.constants import ID_TO_NETWORKNAME
 from raiden.encoding import signing
 from raiden.exceptions import (
@@ -27,6 +29,7 @@ from raiden.messages import (
     decode as message_from_bytes,
     from_dict as message_from_dict
 )
+from raiden.network.utils import get_http_rtt
 from raiden.transfer.state import NODE_NETWORK_REACHABLE, NODE_NETWORK_UNREACHABLE
 from raiden.transfer.state_change import ActionChangeNodeNetworkState
 from raiden.udp_message_handler import on_udp_message
@@ -41,7 +44,7 @@ from raiden.utils import (
     sha3,
     typing
 )
-from raiden_libs.network.matrix import GMatrixClient
+from raiden_libs.network.matrix import GMatrixClient, Room
 
 
 log = slogging.get_logger(__name__)
@@ -62,10 +65,12 @@ class RaidenMatrixProtocol:
     _room_prefix = 'raiden'
     _room_sep = '_'
 
-    def __init__(self, raiden: 'raiden_service.RaidenService'):
-        self.raiden = raiden
-        self._server_name = self.raiden.config['matrix']['server']
-        self.client = GMatrixClient(self._server_name)
+    def __init__(self, raiden_service: 'raiden.raiden_service.RaidenService'):
+        self.raiden_service: 'raiden.raiden_service.RaidenService' = raiden_service
+        self._server_name: str = self._select_server()
+        self.client: GMatrixClient = GMatrixClient(self._server_name)
+
+        self.discovery_room: Room = None
 
         self._senthashes_to_states = dict()
         self._receivedhashes_to_processedmessages = dict()
@@ -74,21 +79,70 @@ class RaidenMatrixProtocol:
         self._address_to_roomid_cache: Dict[typing.Address, str] = dict()
 
     @property
-    def network_name(self):
+    def network_name(self) -> str:
         return ID_TO_NETWORKNAME.get(
-            self.raiden.network_id,
-            str(self.raiden.network_id)
+            self.raiden_service.network_id,
+            str(self.raiden_service.network_id)
         )
 
     def start(self):
+        self._login_or_register()
+
+        discovery_room_config = self.raiden_service.config['matrix']['discovery_room']
+        discovery_room_alias = self._make_room_alias(discovery_room_config['alias_fragment'])
+        discovery_room_alias_full = f'#{discovery_room_alias}:{discovery_room_config["server"]}'
+        try:
+            discovery_room = self.client.join_room(discovery_room_alias_full)
+        except MatrixRequestError as ex:
+            if ex.code != 404:
+                raise
+            # Room doesn't exist
+            own_server_hostname = urlparse(self._server_name).hostname
+            if discovery_room_config['server'] != own_server_hostname:
+                raise RuntimeError(
+                    f"Discovery room {discovery_room_alias_full} not found and can't be created on"
+                    f" a federated homeserver."
+                )
+            discovery_room = self.client.create_room(discovery_room_alias, is_public=True)
+        self.discovery_room = discovery_room
+        # Populate initial members
+        self.discovery_room.get_joined_members()
+
+        # Iterate over a copy so we can modify the room list
+        for room_id, room in list(self.client.get_rooms().items()):
+            self._ensure_room_alias(room)
+            if not room.canonical_alias:
+                # Leave any rooms that don't have a canonical alias as they are not part of the
+                # protocol
+                room.leave()
+                continue
+            # Don't listen for messages in the discovery room
+            if room.canonical_alias != discovery_room_alias_full:
+                room.add_listener(self._handle_message)
+            log.debug(
+                'JOINED ROOM',
+                room_id=room_id,
+                aliases=room.aliases
+            )
+
+        self.client.add_invite_listener(self._handle_invite)
+        self.client.add_presence_listener(self._handle_presence_change)
+        self.discovery_room.add_member_state_listener(self._handle_discovery_membership_change)
+        # TODO: Add (better) error handling strategy
+        self.client.start_listener_thread(exception_handler=lambda e: None)
+        # TODO: Add greenlet that regularly refreshes our presence state
+        self.client.set_presence_state(UserPresence.ONLINE.value)
+
+    def _login_or_register(self):
         # password is signed server address
-        password = data_encoder(signing.sign(self._server_name.encode(), self.raiden.private_key))
-        seed = int.from_bytes(signing.sign(b'seed', self.raiden.private_key)[-32:], 'big')
+        password = data_encoder(
+            signing.sign(self._server_name.encode(), self.raiden_service.private_key))
+        seed = int.from_bytes(signing.sign(b'seed', self.raiden_service.private_key)[-32:], 'big')
         rand = Random()  # deterministic, random secret for username suffixes
         rand.seed(seed)
         # try login and register on first 5 possible accounts
         for i in range(5):
-            base_username = address_encoder(self.raiden.address)
+            base_username = address_encoder(self.raiden_service.address)
             username = base_username
             if i:
                 username = f'{username}.{rand.randint(0, 0xffffffff):08x}'
@@ -126,59 +180,15 @@ class RaidenMatrixProtocol:
                     continue
         else:
             raise ValueError('Could not register or login!')
-
         # TODO: persist access_token, to avoid generating a new login every time
-        user = {
-            'user_id': self.client.user_id,
-            'access_token': self.client.token,
-            'home_server': self.client.hs,
-        }
-
         name = data_encoder(
             signing.sign(
-                user['user_id'].encode(),
-                self.raiden.private_key,
+                self.client.user_id.encode(),
+                self.raiden_service.private_key,
                 hasher=eth_sign_sha3
             )
         )
-        self.client.get_user(user['user_id']).set_display_name(name)
-
-        default_rooms = self.raiden.config['matrix']['default_rooms']
-        for room_name in default_rooms.keys():
-            try:
-                self.client.join_room(room_name)
-            except MatrixRequestError as ex:
-                if ex.code != 404:
-                    raise
-                # Room doesn't exist
-                alias, *_ = room_name.partition(':')
-                alias = alias.replace('#', '')
-                self.client.create_room(alias, is_public=True)
-
-        for room_id, room in self.client.get_rooms().items():
-            self._ensure_room_alias(room)
-            should_listen = True
-            # Some rooms are used for non-membership purposes (e.g. presence etc.) and
-            # don't need to be listened on
-            if room.canonical_alias and default_rooms.get(room.canonical_alias) is False:
-                should_listen = False
-            if should_listen:
-                room.add_listener(self._handle_message)
-            log.debug(
-                'ROOM',
-                room_id=room_id,
-                aliases=room.aliases
-            )
-            # TODO: add room monitoring to invite users coming online that match any room we
-            # participate in
-            # @andre: please clarify that above todo.
-
-        self.client.add_invite_listener(self._handle_invite)
-        self.client.add_presence_listener(self._handle_presence_change)
-        # TODO: Add (better) error handling strategy
-        self.client.start_listener_thread(exception_handler=lambda e: None)
-        # TODO: Add greenlet that regularly refreshes our presence state
-        self.client.set_presence_state(UserPresence.ONLINE.value)
+        self.client.get_user(self.client.user_id).set_display_name(name)
 
     def start_health_check(self, node_address):
         users = [
@@ -276,7 +286,7 @@ class RaidenMatrixProtocol:
             if log.isEnabledFor(logging.DEBUG):
                 log.debug(
                     '`Processed` MESSAGE UNKNOWN ECHO',
-                    node=pex(self.raiden.address),
+                    node=pex(self.raiden_service.address),
                     echohash=pex(processed.echo),
                 )
 
@@ -284,7 +294,7 @@ class RaidenMatrixProtocol:
             if log.isEnabledFor(logging.DEBUG):
                 log.debug(
                     '`Processed` MESSAGE RECEIVED',
-                    node=pex(self.raiden.address),
+                    node=pex(self.raiden_service.address),
                     receiver=pex(waitprocessed.receiver_address),
                     echohash=pex(processed.echo),
                 )
@@ -297,18 +307,18 @@ class RaidenMatrixProtocol:
         if is_debug_log_enabled:
             log.info(
                 'MESSAGE RECEIVED',
-                node=pex(self.raiden.address),
+                node=pex(self.raiden_service.address),
                 echohash=pex(echohash),
                 message=message,
                 message_sender=pex(message.sender)
             )
 
         try:
-            on_udp_message(self.raiden, message)
+            on_udp_message(self.raiden_service, message)
 
             # only send the Processed message if the message was handled without exceptions
             processed_message = Processed(
-                self.raiden.address,
+                self.raiden_service.address,
                 echohash,
             )
 
@@ -323,7 +333,7 @@ class RaidenMatrixProtocol:
             if is_debug_log_enabled:
                 log.debug(
                     'PROCESSED',
-                    node=pex(self.raiden.address),
+                    node=pex(self.raiden_service.address),
                     to=pex(message.sender),
                     echohash=pex(echohash),
                 )
@@ -334,7 +344,7 @@ class RaidenMatrixProtocol:
 
         message_data = json.dumps(message.to_dict())
 
-        echohash = sha3(message_data.encode() + self.raiden.address)
+        echohash = sha3(message_data.encode() + self.raiden_service.address)
         self._receivedhashes_to_processedmessages[echohash] = (
             receiver_address, message_data
         )
@@ -442,6 +452,9 @@ class RaidenMatrixProtocol:
 
         return room
 
+    def _make_room_alias(self, *parts):
+        return self._room_sep.join([self._room_prefix, self.network_name, *parts])
+
     @staticmethod
     def _ensure_room_alias(room):
         if not room.canonical_alias:
@@ -482,6 +495,32 @@ class RaidenMatrixProtocol:
     @staticmethod
     def _address_from_user_id(user_id):
         return address_decoder(user_id.partition(':')[0].replace('@', ''))
+
+    def _select_server(self):
+        server = self.raiden_service.config['matrix']['server']
+        if server.startswith('http'):
+            return server
+        elif server != 'auto':
+            raise ValueError('Invalid matrix server specified (valid values: "auto" or a URL)')
+
+        def _get_rtt(server_name):
+            return server_name, get_http_rtt(server_name)
+
+        get_rtt_jobs = [
+            gevent.spawn(_get_rtt, server_name)
+            for server_name
+            in self.raiden_service.config['matrix']['available_servers']
+        ]
+        gevent.joinall(get_rtt_jobs)
+        sorted_servers = sorted((job.value for job in get_rtt_jobs), key=itemgetter(1))
+        log.debug('Matrix homeserver RTT times', rtt_times=sorted_servers)
+        best_server, rtt = sorted_servers[0]
+        log.info(
+            'Automatically selecting matrix homeserver based on RTT',
+            homeserver=best_server,
+            rtt=rtt
+        )
+        return best_server
 
 
 def _validate_userid_signature(user: User) -> bool:

@@ -21,9 +21,9 @@ from raiden.ui.cli import (
     split_endpoint,
     signal,
     APIServer,
-    RestAPI,
-    ADDRESS_TYPE
+    RestAPI
 )
+from raiden.utils.cli import ADDRESS_TYPE
 from raiden.utils import pex, get_system_spec
 
 log = slogging.getLogger(__name__)

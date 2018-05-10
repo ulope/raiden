@@ -49,10 +49,15 @@ class App:  # pylint: disable=too-few-public-methods
         'shutdown_timeout': DEFAULT_SHUTDOWN_TIMEOUT,
         'transport_type': 'udp',
         'matrix': {
-            'server': 'https://transport01.raiden.network',
-            'default_rooms': {
-                # room_name: attach_listener
-                '#raiden_presence:transport01.raiden.network': False
+            'server': 'auto',
+            'available_servers': [
+                'https://transport01.raiden.network',
+                'https://transport02.raiden.network',
+                'https://transport03.raiden.network',
+            ],
+            'discovery_room': {
+                'alias_fragment': 'discovery',
+                'server': 'transport01.raiden.network',
             }
         }
     }

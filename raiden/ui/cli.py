@@ -8,8 +8,8 @@ import socket
 import errno
 import signal
 import shutil
+from copy import deepcopy
 from itertools import count
-from ipaddress import IPv4Address, AddressValueError
 
 import click
 import gevent
@@ -51,7 +51,8 @@ from raiden.tests.utils.smoketest import (
     start_ethereum,
     run_smoketests,
 )
-from raiden.utils.cli import option, command, group, option_group
+from raiden.utils.cli import option, command, group, option_group, NATChoiceType, ADDRESS_TYPE, \
+    MatrixServerType
 
 
 gevent.monkey.patch_all()
@@ -237,38 +238,6 @@ def wait_for_sync(blockchain_service, url, tolerance, sleep):
         wait_for_sync_rpc_api(blockchain_service, sleep)
 
 
-class AddressType(click.ParamType):
-    name = 'address'
-
-    def convert(self, value, param, ctx):
-        try:
-            return address_decoder(value)
-        except TypeError:
-            self.fail('Please specify a valid hex-encoded address.')
-
-
-class NATChoiceType(click.Choice):
-    def convert(self, value, param, ctx):
-        if value.startswith('ext:'):
-            ip, _, port = value[4:].partition(':')
-            try:
-                IPv4Address(ip)
-            except AddressValueError:
-                self.fail('invalid IP address: {}'.format(ip), param, ctx)
-            if port:
-                try:
-                    port = int(port, 0)
-                except ValueError:
-                    self.fail('invalid port number: {}'.format(port), param, ctx)
-            else:
-                port = None
-            return ip, port
-        return super().convert(value, param, ctx)
-
-
-ADDRESS_TYPE = AddressType()
-
-
 def options(func):
     """Having the common app options as a decorator facilitates reuse."""
 
@@ -427,8 +396,14 @@ def options(func):
             'Matrix Transport Options',
             option(
                 '--matrix-server',
-                help='Matrix homeserver to use for communication',
-                default='https://transport01.raiden.network',
+                help=(
+                    'Matrix homeserver to use for communication.\n'
+                    'Valid values:\n'
+                    '"auto" - automatically select a suitable homeserver\n'
+                    'A URL pointing to a Raiden matrix homeserver'
+                ),
+                default='auto',
+                type=MatrixServerType(['auto', '<url>']),
                 show_default=True,
             )
         ),
@@ -537,7 +512,7 @@ def app(
     if datadir is None:
         datadir = os.path.join(os.path.expanduser('~'), '.raiden')
 
-    config = App.DEFAULT_CONFIG.copy()
+    config = deepcopy(App.DEFAULT_CONFIG)
 
     config['host'] = listen_host
     config['port'] = listen_port
