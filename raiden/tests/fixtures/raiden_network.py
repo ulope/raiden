@@ -133,7 +133,8 @@ def raiden_chain(
         nat_invitation_timeout,
         nat_keepalive_retries,
         nat_keepalive_timeout,
-        use_matrix):
+        use_matrix,
+        local_matrix_server):
 
     if len(token_addresses) != 1:
         raise ValueError('raiden_chain only works with a single token')
@@ -158,7 +159,8 @@ def raiden_chain(
         nat_invitation_timeout,
         nat_keepalive_retries,
         nat_keepalive_timeout,
-        use_matrix
+        use_matrix,
+        local_matrix_server
     )
 
     for app in raiden_apps:
@@ -217,7 +219,8 @@ def raiden_network(
         nat_invitation_timeout,
         nat_keepalive_retries,
         nat_keepalive_timeout,
-        use_matrix):
+        use_matrix,
+        local_matrix_server):
 
     raiden_apps = create_apps(
         blockchain_services.blockchain_services,
@@ -234,7 +237,8 @@ def raiden_network(
         nat_invitation_timeout,
         nat_keepalive_retries,
         nat_keepalive_timeout,
-        use_matrix
+        use_matrix,
+        local_matrix_server
     )
 
     app_channels = create_network_channels(
