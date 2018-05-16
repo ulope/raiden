@@ -571,7 +571,6 @@ def app(
 
     # this assumes the eth node is already online
     check_json_rpc(rpc_client)
-    check_discovery_registration_gas(blockchain_service, address)
 
     net_id = blockchain_service.network_id
     if sync_check:
@@ -590,10 +589,14 @@ def app(
         registry_contract_address,
     )
 
-    discovery = ContractDiscovery(
-        blockchain_service.node_address,
-        blockchain_service.discovery(discovery_contract_address)
-    )
+    discovery = None
+    if transport == 'udp':
+        check_discovery_registration_gas(blockchain_service, address)
+
+        discovery = ContractDiscovery(
+            blockchain_service.node_address,
+            blockchain_service.discovery(discovery_contract_address)
+        )
 
     return App(
         config,

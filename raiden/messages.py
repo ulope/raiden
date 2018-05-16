@@ -1,6 +1,3 @@
-# -*- coding: utf-8 -*-
-from binascii import unhexlify
-
 from ethereum.slogging import getLogger
 from ethereum.utils import big_endian_to_int
 
@@ -290,7 +287,7 @@ class Processed(Message):
         return {
             'type': self.__class__.__name__,
             'sender': address_encoder(self.sender),
-            'echo': data_encoder(self.echo),
+            'processed_message_identifier': data_encoder(self.processed_message_identifier),
         }
 
     @classmethod
@@ -298,7 +295,7 @@ class Processed(Message):
         assert data['type'] == cls.__name__
         return cls(
             address_decoder(data['sender']),
-            data_decoder(data['echo']),
+            data_decoder(data['processed_message_identifier']),
         )
 
 
@@ -387,7 +384,7 @@ class SecretRequest(SignedMessage):
         return {
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
-            'secrethash': self.secrethash.hex(),
+            'secrethash': data_encoder(self.secrethash),
             'type': self.__class__.__name__,
             'amount': self.amount,
             'signature': data_encoder(self.signature),
@@ -399,7 +396,7 @@ class SecretRequest(SignedMessage):
         message = cls(
             data['message_identifier'],
             data['payment_identifier'],
-            unhexlify(data['secrethash']),
+            data_decoder(data['secrethash']),
             data['amount'],
         )
         message.signature = data_decoder(data['signature'])
@@ -515,7 +512,7 @@ class Secret(EnvelopeMessage):
             'type': self.__class__.__name__,
             'message_identifier': self.message_identifier,
             'payment_identifier': self.payment_identifier,
-            'secret': self.secret.hex(),
+            'secret': data_encoder(self.secret),
             'nonce': self.nonce,
             'channel': address_encoder(self.channel),
             'transferred_amount': self.transferred_amount,
@@ -836,7 +833,7 @@ class Lock:
             'type': self.__class__.__name__,
             'amount': self.amount,
             'expiration': self.expiration,
-            'secrethash': self.secrethash.hex(),
+            'secrethash': data_encoder(self.secrethash),
         }
 
     @classmethod
@@ -1193,18 +1190,19 @@ class RefundTransfer(LockedTransfer):
             data['message_identifier'],
             data['payment_identifier'],
             data['nonce'],
-            unhexlify(data['token']),
-            unhexlify(data['channel']),
+            address_decoder(data['token']),
+            address_decoder(data['channel']),
             data['transferred_amount'],
-            unhexlify(data['recipient']),
-            unhexlify(data['locksroot']),
+            address_decoder(data['recipient']),
+            data_decoder(data['locksroot']),
             Lock.from_dict(data['lock']),
-            unhexlify(data['target']),
-            unhexlify(data['initiator']),
+            address_decoder(data['target']),
+            address_decoder(data['initiator']),
             data['fee'],
         )
-        message.signature = unhexlify(data['signature'])
+        message.signature = data_decoder(data['signature'])
         return message
+
 
 MESSAGES = (
     Processed,

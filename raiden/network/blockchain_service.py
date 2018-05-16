@@ -208,7 +208,7 @@ class BlockChainService:
     @property
     @lru_cache()
     def network_id(self) -> int:
-        return int(self.client.call('net_version'))
+        return int(self.client.rpccall_with_retry('net_version'))
 
     def on_reconnect(self):
         self.__class__.__dict__['network_id'].fget.cache_clear()
