@@ -14,10 +14,17 @@ docker_version: "17.05.0-ce"
 
 docker_repo_empty:      "{{ aws_account }}.dkr.ecr.us-east-1.amazonaws.com/brainbot/empty"
 docker_repo_eth_parity: "parity/parity:beta"
-docker_repo_eth_geth:   "{{ aws_account }}.dkr.ecr.us-east-1.amazonaws.com/brainbot/geth-testnet"
+# Currently using the official image, switch back to the below one to re-enable initial syncing
+# with fixed bootnodes and afterwards running normally.
+# see tools/testnet/files/dockerfiles/geth-testnet
+#docker_repo_eth_geth:   "{{ aws_account }}.dkr.ecr.us-east-1.amazonaws.com/brainbot/geth-testnet"
+docker_repo_eth_geth:   "ethereum/client-go"
 docker_repo_mkkeystore: "{{ aws_account }}.dkr.ecr.us-east-1.amazonaws.com/brainbot/mkkeystore"
 docker_repo_raiden:     "{{ aws_account }}.dkr.ecr.us-east-1.amazonaws.com/brainbot/raiden"
 
 raiden_root: /etc/raiden
 
 echo_node_token_address: "0x0f114A1E9Db192502E7856309cc899952b3db1ED"
+
+# Transport to use: either "matrix" or "udp"
+transport: "matrix"

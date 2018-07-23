@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+import gevent.monkey
+gevent.monkey.patch_all()
+
 import json
 import logging
 import os
@@ -52,10 +55,10 @@ if __name__ == "__main__":
             NotCrashingUDPLogstashHandler(
                 os.environ.get('RAIDEN_LOGSTASH_HOST'),
                 int(os.environ.get('RAIDEN_LOGSTASH_PORT', 9595)),
-                version=1
-            )
+                version=1,
+            ),
         )
 
     sys.exit(
-        echo_node.runner()
+        echo_node.runner(),
     )

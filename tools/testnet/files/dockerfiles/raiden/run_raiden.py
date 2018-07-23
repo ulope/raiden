@@ -18,7 +18,24 @@ def main(eth_nodes, seed, raiden_executable, raiden_args):
     eth_nodes = eth_nodes.split(",")
     offset = sum(ord(c) for c in seed) % len(eth_nodes)
     target_eth_node = eth_nodes[offset]
-    raiden_args = [raiden_executable] + list(raiden_args) + [ETH_RPC_ENDPOINT_ARG, target_eth_node]
+
+    raiden_args = list(raiden_args)
+    if 'echonode' in raiden_args:
+        # We need to splice the eth rpc arg in before the `echonode` subcommand
+        end_of_run_args = raiden_args.index('echonode')
+        raiden_args = (
+            [raiden_executable] +
+            raiden_args[:end_of_run_args] +
+            [ETH_RPC_ENDPOINT_ARG, target_eth_node] +
+            raiden_args[end_of_run_args:]
+        )
+    else:
+        raiden_args = (
+            [raiden_executable] +
+            raiden_args +
+            [ETH_RPC_ENDPOINT_ARG, target_eth_node]
+        )
+
     print(" ".join(raiden_args))
     # Ensure print is flushed - exec could swallow it
     sys.stdout.flush()

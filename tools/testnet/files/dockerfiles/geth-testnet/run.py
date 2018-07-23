@@ -97,7 +97,7 @@ BOOTNODES = [
 ETHERSCAN_API_BLOCKNO = "https://ropsten.etherscan.io/api?module=proxy&action=eth_blockNumber"
 
 GETH_PATH = "/usr/local/bin/geth"
-GETH_CMD_RUN = [GETH_PATH, "--testnet", "--fast", "--rpc", "--rpcaddr", "0.0.0.0"]
+GETH_CMD_RUN = [GETH_PATH, "--testnet", "--rpc", "--rpcaddr", "0.0.0.0"]
 GETH_CMD_RUN_INITIAL = [*GETH_CMD_RUN, "--nodiscover"]
 
 # Max delay before syncing must have started

@@ -14,8 +14,8 @@
     volumes:
       - "{{ raiden_root }}:/root/.raiden"
       - "{{ keystore_root }}:/keystore"
-    env:
-      RAIDEN_LOGSTASH_HOST: logstash
+#    env:
+#      RAIDEN_LOGSTASH_HOST: logstash
     command:
       - "--eth-nodes"
       - "{% for item in groups['role_eth'] %}{{ hostvars[item]['private_ip'] }}{{ '' if loop.last else ',' }}{% endfor %}"
@@ -32,8 +32,10 @@
       - "{{ keystore_address }}"
       - "--password-file"
       - "/keystore/password"
-      - "--logging"
-      - ":trace"
+      - "--transport"
+      - "{{ transport }}"
+      - "--log-config"
+      - ":debug"
       - "--log-json"
       - "{{ '--token-address' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
       - "{{ echo_node_token_address if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"

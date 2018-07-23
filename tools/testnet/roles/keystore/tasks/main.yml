@@ -17,10 +17,18 @@
 - set_fact:
     keystore_filename: "{{ keystore_root }}/UTC--{{ keystore_file_date }}--{{ private_ip }}"
 
+- set_fact:
+    keystore_address_filename: "{{ keystore_filename }}.address"
+
 - name: Check keystore file
   stat:
     path: "{{ keystore_filename }}"
   register: keystore_file
+
+- name: Check keystore address file
+  stat:
+    path: "{{ keystore_address_filename }}"
+  register: keystore_address_file
 
 - name: Create keystore file
   docker_container:
@@ -42,25 +50,22 @@
     volumes:
       - "{{ keystore_root }}:/data"
       - /tmp:/tmp
-  when: keystore_file.stat.exists == False
+  when: keystore_file.stat.exists == False or keystore_address_file.stat.exists == False
 
 - name: Wait for keystore generation
   command: docker wait create_keystore
-  when: keystore_file.stat.exists == False
+  when: keystore_file.stat.exists == False or keystore_address_file.stat.exists == False
 
 - name: Remove keystore helper container
   docker_container:
     name: create_keystore
     state: absent
-  when: keystore_file.stat.exists == False
+  when: keystore_file.stat.exists == False or keystore_address_file.stat.exists == False
 
 - name: Fetch keystore address
-  command: "cat {{ keystore_filename }}"
+  command: "cat {{ keystore_filename }}.address"
   changed_when: no
-  register: keystore_content
+  register: keystore_address
 
 - set_fact:
-    keystore_content: "{{ keystore_content.stdout|from_json }}"
-
-- set_fact:
-    keystore_address: "{{ keystore_content['address'] }}"
+    keystore_address: "{{ keystore_address.stdout }}"

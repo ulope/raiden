@@ -46,3 +46,9 @@
       - "30303:30303/udp"
     volumes:
       - "{{ data_volume_dir }}/geth:/root/.ethereum"
+    command:
+      - "--testnet"
+      - "--syncmode full"
+      - "--rpc"
+      - "--rpcaddr 0.0.0.0"
+      - "--rpccorsdomain '*'"
