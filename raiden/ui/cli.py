@@ -532,14 +532,14 @@ def options(func):
             ),
             option(
                 '--log-file',
-                help='file path for logging to file',
+                help='Write log to <file> in addition to stderr',
                 default=None,
                 type=str,
                 show_default=True,
             ),
             option(
                 '--log-json',
-                help='Output log lines in JSON format',
+                help='Output log lines in JSON format (only applies to output via --log-file)',
                 is_flag=True,
             ),
             option(
