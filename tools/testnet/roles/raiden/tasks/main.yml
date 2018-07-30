@@ -1,3 +1,11 @@
+- name: Ensure Raiden node log-dir
+  become: yes
+  file:
+    name: "{{ raiden_node_log_root }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    mode: 0700
+
 - name: Raiden docker container
   docker_container:
     name: raiden
@@ -14,6 +22,7 @@
     volumes:
       - "{{ raiden_root }}:/root/.raiden"
       - "{{ keystore_root }}:/keystore"
+      - "{{ raiden_node_log_root }}:/log"
 #    env:
 #      RAIDEN_LOGSTASH_HOST: logstash
     command:
@@ -37,5 +46,8 @@
       - "--log-config"
       - ":debug"
       - "--log-json"
+      - "--log-file"
+      - "/log/raiden.log"
+      - "{{ 'echonode' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
       - "{{ '--token-address' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
       - "{{ echo_node_token_address if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
