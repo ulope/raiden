@@ -24,7 +24,8 @@ up:
 down:
 	terraform destroy -force
 
-docker: docker-push-geth docker-push-mkkeystore docker-push-empty docker-push-raiden
+#docker: docker-push-geth docker-push-mkkeystore docker-push-empty docker-push-raiden
+docker: docker-push-mkkeystore docker-push-empty docker-push-raiden
 
 aws-ecr-login:
 	bash -c 'eval $$(aws ecr get-login --no-include-email) ;'
