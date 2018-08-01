@@ -44,7 +44,7 @@
       - "--transport"
       - "{{ transport }}"
       - "--log-config"
-      - ":debug"
+      - ":info,raiden:debug"
       - "--log-json"
       - "--log-file"
       - "/log/raiden.log"

@@ -20,7 +20,7 @@ variable "count_infrastructure" {
 }
 
 variable "count_eth" {
-    default = 3
+    default = 2
 }
 
 variable "count_raiden" {
@@ -45,7 +45,7 @@ variable "instance_type" {
     type = "map"
     default = {
         "infrastructure" = "t2.small",
-        "eth" = "t2.small",
+        "eth" = "t2.medium",
         "raiden_echo" = "t2.nano",
         "raiden" = "t2.nano"
     }
