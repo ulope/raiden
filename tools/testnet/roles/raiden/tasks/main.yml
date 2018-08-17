@@ -27,7 +27,7 @@
 #      RAIDEN_LOGSTASH_HOST: logstash
     command:
       - "--eth-nodes"
-      - "{% for item in groups['role_eth'] %}{{ hostvars[item]['private_ip'] }}{{ '' if loop.last else ',' }}{% endfor %}"
+      - "{% for item in groups['role_eth'] %}{{ hostvars[item]['private_ip'] }}:8545{{ '' if loop.last else ',' }}{% endfor %}"
       - "--seed"
       - "{{ private_ip }}"
       - "--raiden-executable"
