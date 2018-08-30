@@ -33,6 +33,8 @@
       - "--raiden-executable"
       - "{{ 'raiden_echo_node' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else 'raiden' }}"
       - "--"
+      - "--gas-price"
+      - "20000000000"
       - "--api-address"
       - "0.0.0.0:5001"
       - "--keystore-path"
