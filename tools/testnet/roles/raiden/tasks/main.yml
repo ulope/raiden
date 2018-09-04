@@ -50,6 +50,7 @@
       - "--log-json"
       - "--log-file"
       - "/log/raiden.log"
+      - "--accept-disclaimer"
       - "{{ 'echonode' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
       - "{{ '--token-address' if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
       - "{{ echo_node_token_address if hostvars[inventory_hostname].get('tags.Echo') == 'true' else '' }}"
