@@ -37,7 +37,6 @@ RUN \
 
 ADD run_raiden.py /usr/local/bin
 ADD raiden /usr/local/bin
-ADD raiden_echo_node /usr/local/bin
 
 
 ENTRYPOINT ["/usr/local/bin/run_raiden.py"]
