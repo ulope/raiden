@@ -8,6 +8,7 @@ from web3 import HTTPProvider, Web3
 from raiden.accounts import Account
 from raiden.network.rpc.client import JSONRPCClient
 
+
 WEI_TO_ETH = 10 ** 18
 
 
@@ -29,18 +30,19 @@ def main(keystore_file, password, rpc_url, eth_amount, targets_file):
 
     balance_needed = len(targets) * eth_amount
     if balance_needed * WEI_TO_ETH > balance:
-        print("Not enough balance to fund {} accounts with {} eth each. Need {}, have {}".format(
+        print("Not enough balance to fund {} accounts with {} cETH each. Need {}, have {}".format(
             len(targets),
             eth_amount,
             balance_needed,
             balance / WEI_TO_ETH,
         ))
 
-    print("Sending {} eth to:".format(eth_amount))
+    total_eth = eth_amount * len(targets) * WEI_TO_ETH
+    print(f"Sending {eth_amount} ETH each ({total_eth} ETH total) to:")
     for target in targets:
         print("  - {}".format(target))
         client.send_transaction(to=target, value=eth_amount * WEI_TO_ETH)
 
 
 if __name__ == "__main__":
-    main()  # pylint: disable=no-value-for-parameter
+    main()
