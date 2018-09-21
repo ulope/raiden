@@ -5,7 +5,7 @@ MAINTAINER Ulrich Petri <ulrich@brainbot.com>
 RUN \
     apt update && \
     apt install -y libssl-dev build-essential automake pkg-config libtool libffi-dev libgmp-dev && \
-    pip3 install ethereum coincurve click eth_utils && \
+    pip3 install ethereum coincurve click eth_utils eth_keyfile raiden-libs && \
     rm -rf /var/lib/apt/lists/*
 
 ADD mkkey.py /usr/bin/

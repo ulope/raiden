@@ -28,7 +28,9 @@ class BytesJSONEncoder(JSONEncoder):
 @click.argument("private_key_seed", nargs=-1)
 def main(password, private_key_seed, date_string, key_label, output_dir):
     output_dir = Path(output_dir)
-    private_key_bin = keccak_256("".join(seed for seed in private_key_seed).encode("UTF-8"))
+    private_key_bin = keccak_256(
+        "".join(seed for seed in private_key_seed).encode("UTF-8"),
+    ).digest()
 
     password = password.encode("UTF-8")
 
@@ -45,7 +47,7 @@ def main(password, private_key_seed, date_string, key_label, output_dir):
     address = to_checksum_address(key['address'])
 
     output_dir.joinpath(f"{filename}.address").write_text(address)
-    print(f"0x{address}")
+    print(address)
 
 
 if __name__ == "__main__":
