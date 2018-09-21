@@ -13,6 +13,7 @@ Requirements
 * terraform-inventory_
 * awscli_
 * ansible_ >= 2.3
+* netaddr_
 * docker_
 
 #. Ensure both terraform_ and terraform-inventory_ are installed into the PATH.
@@ -31,6 +32,7 @@ Requirements
 .. _terraform-inventory: https://github.com/adammck/terraform-inventory/releases/tag/v0.7-pre
 .. _awscli: https://pypi.org/project/awscli/
 .. _ansible: https://pypi.org/project/ansible/
+.. _netaddr: https://pypi.org/project/netaddr/
 .. _docker: https://docker.io
 .. _pipsi: https://github.com/mitsuhiko/pipsi/
 

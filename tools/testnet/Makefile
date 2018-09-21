@@ -1,13 +1,8 @@
 .PHONY: all up down docker
 
-repo_arg=
-ifdef REPO
-repo_arg=--build-arg REPO=$(REPO)
-endif
-
-branch_arg=
-ifdef BRANCH
-branch_arg=--build-arg BRANCH=$(BRANCH)
+raiden_bin_url_arg=
+ifdef RAIDEN_BIN_URL
+raiden_bin_url_arg=--build-arg RAIDEN_BIN_URL=$(RAIDEN_BIN_URL)
 endif
 
 nocache_arg=
@@ -30,11 +25,6 @@ docker: docker-push-mkkeystore docker-push-empty docker-push-raiden
 aws-ecr-login:
 	bash -c 'eval $$(aws ecr get-login --no-include-email) ;'
 
-raiden-mk-appimage: ../../dist/raiden--x86_64.AppImage
-
-../../dist/raiden--x86_64.AppImage:
-	make -C ../../ bundle
-
 docker-mk-geth:
 	docker build -t brainbot/geth-testnet $(nocache_arg) files/dockerfiles/geth-testnet
 
@@ -45,8 +35,7 @@ docker-mk-empty:
 	docker build -t brainbot/empty $(nocache_arg) files/dockerfiles/empty
 
 docker-mk-raiden:
-	# TODO: switch back to use AppImage
-	docker build -t brainbot/raiden $(nocache_arg) $(repo_arg) $(branch_arg) files/dockerfiles/raiden
+	docker build -t brainbot/raiden $(nocache_arg) $(raiden_bin_url_arg) files/dockerfiles/raiden
 
 docker-push-geth: docker-mk-geth aws-ecr-login
 	docker tag brainbot/geth-testnet 147258760518.dkr.ecr.us-east-1.amazonaws.com/brainbot/geth-testnet
