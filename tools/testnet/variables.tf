@@ -55,6 +55,6 @@ variable "volume_size" {
     type = "map"
     default = {
         "infrastructure" = 50,
-        "eth" = 30,
+        "eth" = 50,
     }
 }
