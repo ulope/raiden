@@ -8,7 +8,6 @@ from web3 import HTTPProvider, Web3
 from raiden.accounts import Account
 from raiden.network.rpc.client import JSONRPCClient
 
-
 WEI_TO_ETH = 10 ** 18
 
 
@@ -30,7 +29,7 @@ def main(keystore_file, password, rpc_url, eth_amount, targets_file):
 
     balance_needed = len(targets) * eth_amount
     if balance_needed * WEI_TO_ETH > balance:
-        print("Not enough balance to fund {} accounts with {} cETH each. Need {}, have {}".format(
+        print("Not enough balance to fund {} accounts with {} ETH each. Need {}, have {}".format(
             len(targets),
             eth_amount,
             balance_needed,

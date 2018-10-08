@@ -14,6 +14,8 @@ RUN \
 # Can either be a direct download URL or a txt file pointing to the latest download
 ARG RAIDEN_BIN_URL=https://raiden-nightlies.ams3.digitaloceanspaces.com/_LATEST-linux.txt
 
+ADD ${RAIDEN_BIN_URL} /dev/null
+
 ADD fetch_raiden_bin.sh /usr/local/bin/fetch_raiden_bin.sh
 RUN /usr/local/bin/fetch_raiden_bin.sh
 
