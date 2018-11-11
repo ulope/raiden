@@ -121,7 +121,7 @@ class _RetryQueue(Runnable):
     @staticmethod
     def _expiration_generator(
             timeout_generator: Iterable[float],
-            now: Callable[[], float]=time.time,
+            now: Callable[[], float] = time.time,
     ) -> Iterator[bool]:
         """Stateful generator that yields True if more than timeout has passed since previous True,
         False otherwise.
@@ -638,6 +638,7 @@ class MatrixTransport(Runnable):
                 continue
             # we add listener for all valid rooms, _handle_message should ignore them
             # if msg sender weren't start_health_check'ed yet
+            self.log.debug('Want to add listener', listeners=room.listeners)
             if not room.listeners:
                 room.add_listener(self._handle_message, 'm.room.message')
             self.log.debug(
@@ -651,6 +652,7 @@ class MatrixTransport(Runnable):
         if self._stop_event.ready():
             return
 
+        self.log.debug('Got invite', room_id=room_id)
         invite_events = [
             event
             for event in state['events']
@@ -659,6 +661,7 @@ class MatrixTransport(Runnable):
             event['state_key'] == self._user_id
         ]
         if not invite_events:
+            self.log.debug('Invite: no invite event found', room_id=room_id)
             return  # there should always be one and only one invite membership event for us
         invite_event = invite_events[0]
         sender = invite_event['sender']
@@ -671,6 +674,7 @@ class MatrixTransport(Runnable):
             event['state_key'] == sender
         ]
         if not sender_join_events:
+            self.log.debug('Invite: no sender join event', room_id=room_id)
             return  # there should always be one and only one join membership event for the sender
         sender_join_event = sender_join_events[0]
 
@@ -721,6 +725,7 @@ class MatrixTransport(Runnable):
             else:
                 raise last_ex  # re-raise if couldn't succeed in retries
 
+            self.log.debug('Invite: Want to add listener', listeners=room.listeners)
             if not room.listeners:
                 room.add_listener(self._handle_message, 'm.room.message')
 
@@ -1016,6 +1021,7 @@ class MatrixTransport(Runnable):
             room = self._get_public_room(room_name, invitees=peers)
         self._set_room_id_for_address(address, room.room_id)
 
+        self.log.debug('Want to add listener', listeners=room.listeners)
         if not room.listeners:
             room.add_listener(self._handle_message, 'm.room.message')
 
