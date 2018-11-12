@@ -747,10 +747,10 @@ class MatrixTransport(Runnable):
 
         self._spawn(join_room)
 
-    @cachedmethod(
-        attrgetter('_messages_cache'),
-        key=lambda _, room, event: (room.room_id, event['type'], event['content'].get('body')),
-    )
+    # @cachedmethod(
+    #     attrgetter('_messages_cache'),
+    #     key=lambda _, room, event: (room.room_id, event['type'], event['content'].get('body')),
+    # )
     def _handle_message(self, room, event) -> bool:
         """ Handle text messages sent to listening rooms """
         if (
@@ -1277,7 +1277,7 @@ class MatrixTransport(Runnable):
             signature=signature,
         )
 
-    @cached(_addresses_cache, key=lambda _, user: (user.user_id, user.displayname))
+    # @cached(_addresses_cache, key=lambda _, user: (user.user_id, user.displayname))
     def _validate_userid_signature(self, user: User) -> Optional[Address]:
         """ Validate a userId format and signature on displayName, and return its address"""
         # display_name should be an address in the self._userid_re format
