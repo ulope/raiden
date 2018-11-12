@@ -468,6 +468,10 @@ class MatrixTransport(Runnable):
             }
             self.whitelist(node_address)
             self._address_to_userids[node_address].update(user_ids)
+            self.log.debug(
+                'Update address to userids',
+                address_to_userids=self._address_to_userids,
+            )
 
             # Ensure network state is updated in case we already know about the user presences
             # representing the target node
@@ -892,8 +896,8 @@ class MatrixTransport(Runnable):
             return False
 
         self.log.debug(
-            'Message data',
-            data=data,
+            'Incoming messages',
+            messages=messages,
             sender=pex(peer_address),
             sender_user=user,
             room=room,
