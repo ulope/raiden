@@ -972,7 +972,12 @@ class MatrixTransport(Runnable):
             room = self._get_room_for_address(receiver_address)
         if not room:
             return
-        self.log.debug('Send', receiver=pex(receiver_address), room=room, data=data)
+        self.log.debug(
+            'Send raw',
+            receiver=pex(receiver_address),
+            room=room,
+            data=data.replace('\n', '\\n'),
+        )
         room.send_text(data)
 
     def _get_room_for_address(
@@ -1437,12 +1442,17 @@ class MatrixTransport(Runnable):
         rooms: List[Tuple[_RoomID, Room]] = list(self._client.rooms.items())
 
         if changed:
+            self.log.debug(
+                'Updated address room mapping',
+                address_to_room_ids=_address_to_room_ids,
+            )
             self._client.set_account_data('network.raiden.rooms', _address_to_room_ids)
 
         def leave(room: Room):
             """A race between /leave and /sync may remove the room before
             del on _client.rooms key. Suppress it, as the end result is the same: no more room"""
             try:
+                self.log.debug('Leaving unused room', room=room)
                 return room.leave()
             except KeyError:
                 return True
