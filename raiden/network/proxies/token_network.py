@@ -85,7 +85,7 @@ class TokenNetwork:
         if not is_binary_address(manager_address):
             raise InvalidAddress('Expected binary address format for token nework')
 
-        check_address_has_code(jsonrpc_client, manager_address, CONTRACT_TOKEN_NETWORK)
+        # check_address_has_code(jsonrpc_client, manager_address, CONTRACT_TOKEN_NETWORK)
 
         self.contract_manager = contract_manager
         proxy = jsonrpc_client.new_contract_proxy(
@@ -93,12 +93,12 @@ class TokenNetwork:
             to_normalized_address(manager_address),
         )
 
-        compare_contract_versions(
-            proxy=proxy,
-            expected_version=contract_manager.contracts_version,
-            contract_name=CONTRACT_TOKEN_NETWORK,
-            address=manager_address,
-        )
+        # compare_contract_versions(
+        #     proxy=proxy,
+        #     expected_version=contract_manager.contracts_version,
+        #     contract_name=CONTRACT_TOKEN_NETWORK,
+        #     address=manager_address,
+        # )
 
         self.address = manager_address
         self.proxy = proxy
