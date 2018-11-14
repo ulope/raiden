@@ -5,10 +5,13 @@ import os
 import re
 import sys
 from functools import wraps
+from io import StringIO
 from traceback import TracebackException
 from typing import Callable, Dict, FrozenSet, List, Pattern, Tuple
 
+import gevent
 import structlog
+from structlog.dev import ConsoleRenderer, _pad
 
 DEFAULT_LOG_LEVEL = 'INFO'
 MAX_LOG_FILE_SIZE = 20 * 1024 * 1024
@@ -102,6 +105,84 @@ class RaidenFilter(logging.Filter):
         return self._log_filter.should_log(record.name, record.levelname)
 
 
+class RaidenConsoleRenderer(ConsoleRenderer):
+    # Copy paste from `structlog.dev.ConsoleRenderer` to add greenlet id
+    def __call__(self, _, __, event_dict):
+        sio = StringIO()
+
+        ts = event_dict.pop("timestamp", None)
+        if ts is not None:
+            sio.write(
+                # can be a number if timestamp is UNIXy
+                self._styles.timestamp +
+                str(ts) +
+                self._styles.reset +
+                " ",
+            )
+        greenlet_id = event_dict.pop('greenlet_id', None)
+        if greenlet_id is not None:
+            sio.write(f"[{greenlet_id:03d}] ")
+        level = event_dict.pop("level", None)
+        if level is not None:
+            sio.write(
+                "[" +
+                self._level_to_color[level] +
+                _pad(level, self._longest_level) +
+                self._styles.reset +
+                "] ",
+            )
+
+        event = event_dict.pop("event")
+        if event_dict:
+            event = _pad(event, self._pad_event) + self._styles.reset + " "
+        else:
+            event += self._styles.reset
+        sio.write(self._styles.bright + event)
+
+        logger_name = event_dict.pop("logger", None)
+        if logger_name is not None:
+            sio.write(
+                "[" +
+                self._styles.logger_name +
+                self._styles.bright +
+                logger_name +
+                self._styles.reset +
+                "] ",
+            )
+
+        stack = event_dict.pop("stack", None)
+        exc = event_dict.pop("exception", None)
+        sio.write(
+            " ".join(
+                self._styles.kv_key +
+                key +
+                self._styles.reset +
+                "=" +
+                self._styles.kv_value +
+                self._repr(event_dict[key]) +
+                self._styles.reset
+                for key in sorted(event_dict.keys())
+            ),
+        )
+
+        if stack is not None:
+            sio.write("\n" + stack)
+            if exc is not None:
+                sio.write("\n\n" + "=" * 79 + "\n")
+        if exc is not None:
+            sio.write("\n" + exc)
+
+        return sio.getvalue()
+
+
+def add_greenlet_id(logger, method_name, event_dict):
+    """
+    Add the greenlet id to the event dict.
+    """
+    event_dict['greenlet_id'] = getattr(gevent.getcurrent(), 'minimal_ident', None)
+    return event_dict
+
+
 def redactor(blacklist: Dict[Pattern, str]) -> Callable[[str], str]:
     """Returns a function which transforms a str, replacing all matches for its replacement"""
     def processor_wrapper(msg: str) -> str:
@@ -147,6 +228,7 @@ def configure_logging(
     processors = [
         structlog.stdlib.add_logger_name,
         structlog.stdlib.add_log_level,
+        add_greenlet_id,
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
         structlog.processors.StackInfoRenderer(),
@@ -216,7 +298,7 @@ def configure_logging(
             'formatters': {
                 'plain': {
                     '()': structlog.stdlib.ProcessorFormatter,
-                    'processor': _chain(structlog.dev.ConsoleRenderer(colors=False), redact),
+                    'processor': _chain(RaidenConsoleRenderer(colors=False), redact),
                     'foreign_pre_chain': processors,
                 },
                 'json': {
@@ -226,7 +308,7 @@ def configure_logging(
                 },
                 'colorized': {
                     '()': structlog.stdlib.ProcessorFormatter,
-                    'processor': _chain(structlog.dev.ConsoleRenderer(colors=True), redact),
+                    'processor': _chain(RaidenConsoleRenderer(colors=True), redact),
                     'foreign_pre_chain': processors,
                 },
                 'debug': {
