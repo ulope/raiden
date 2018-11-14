@@ -4,8 +4,10 @@ import logging.config
 import os
 import re
 import sys
+from collections import defaultdict
 from functools import wraps
 from io import StringIO
+from itertools import count
 from traceback import TracebackException
 from typing import Callable, Dict, FrozenSet, List, Pattern, Tuple
 
@@ -18,6 +20,8 @@ MAX_LOG_FILE_SIZE = 20 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
 
 _FIRST_PARTY_PACKAGES = frozenset(['raiden'])
+_GREENLET_SEQ = count()
+_GREENLET_IDS = defaultdict(lambda: next(_GREENLET_SEQ))
 
 
 def _chain(first_func, *funcs) -> Callable:
@@ -179,7 +183,7 @@ def add_greenlet_id(logger, method_name, event_dict):
     """
     Add the greenlet id to the event dict.
     """
-    event_dict['greenlet_id'] = getattr(gevent.getcurrent(), 'minimal_ident', None)
+    event_dict['greenlet_id'] = _GREENLET_IDS[id(gevent.getcurrent())]
     return event_dict
 
 
