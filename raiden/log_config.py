@@ -19,7 +19,7 @@ DEFAULT_LOG_LEVEL = 'INFO'
 MAX_LOG_FILE_SIZE = 20 * 1024 * 1024
 LOG_BACKUP_COUNT = 3
 
-_FIRST_PARTY_PACKAGES = frozenset(['raiden'])
+_FIRST_PARTY_PACKAGES = frozenset(['raiden', 'raiden_libs', 'raiden_contracts'])
 _GREENLET_SEQ = count()
 _GREENLET_IDS = defaultdict(lambda: next(_GREENLET_SEQ))
 
