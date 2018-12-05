@@ -183,7 +183,11 @@ def add_greenlet_id(logger, method_name, event_dict):
     """
     Add the greenlet id to the event dict.
     """
-    event_dict['greenlet_id'] = _GREENLET_IDS[id(gevent.getcurrent())]
+    current_greenlet = gevent.getcurrent()
+    event_dict['greenlet_id'] = _GREENLET_IDS[id(current_greenlet)]
+    greenlet_name = getattr(current_greenlet, 'name', None)
+    if greenlet_name is not None and not greenlet_name.startswith('Greenlet-'):
+        event_dict['greenlet_name'] = greenlet_name
     return event_dict
 
 
@@ -234,7 +238,7 @@ def configure_logging(
         structlog.stdlib.add_log_level,
         add_greenlet_id,
         structlog.stdlib.PositionalArgumentsFormatter(),
-        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
+        structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S.%f"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
     ]
