@@ -253,7 +253,7 @@ def test_reject_invite_of_invalid_room(
     monkeypatch.setattr(mock_matrix._client.api, "leave_room", mock_leave_room)
 
     with pytest.raises(AssertionError):
-        mock_matrix._handle_invite(invalid_room_id, invite_state)
+        mock_matrix._reject_invite(invalid_room_id, invite_state)
     assert leave_room_called
 
 
